@@ -22,6 +22,24 @@ Music comes from free and legal sources:
 - Lock-screen and notification controls, plays in the background
 - Mini player: tap to open, swipe up to expand, swipe sideways to skip
 
+## Background playback
+
+Music keeps playing when you lock the phone or switch apps:
+
+- **iPhone**: background audio mode plus a music audio session. Controls appear on the lock
+  screen and in Control Center, it pauses for phone calls and resumes after.
+- **Android**: a media-playback foreground service with notification and lock-screen
+  controls. Some phones (Xiaomi, Oppo, Vivo, Samsung) kill background apps to save battery:
+  set Mutiny's battery usage to **Unrestricted** if music stops.
+- Pulling out headphones or disconnecting Bluetooth pauses the music, like Spotify.
+
+## Branding
+
+Everything is in `branding/`: SVG (vector) and PNG versions of the symbol, the
+horizontal and stacked logos, app icons (normal, rounded, Android foreground, monochrome),
+the splash image and `mutiny-brand-sheet.png`. The symbol is the same halftone wave ring
+as the My Wave animation.
+
 ## Project layout
 
 ```

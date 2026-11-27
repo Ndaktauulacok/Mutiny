@@ -262,7 +262,7 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 0, 16, 0),
       child: Row(
         children: [
-          const MutinyMark(size: 26),
+          const MutinyMark(size: 30),
           const SizedBox(width: 8),
           const Text('Mutiny', style: TextStyle(fontFamily: MText.display, fontSize: 19, fontWeight: FontWeight.w700, color: MColors.lilac)),
           const SizedBox(width: 12),
@@ -274,21 +274,17 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// The app's logo: a small flag of halftone waves.
+/// The app's logo: the halftone wave ring.
 class MutinyMark extends StatelessWidget {
   const MutinyMark({super.key, this.size = 28});
   final double size;
 
   @override
-  Widget build(BuildContext context) => SizedBox.square(
-        dimension: size,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(size * 0.3),
-            gradient: const LinearGradient(colors: [MColors.lilac, MColors.purple], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          ),
-          child: Icon(Icons.graphic_eq_rounded, size: size * 0.66, color: MColors.bg),
-        ),
+  Widget build(BuildContext context) => Image.asset(
+        'assets/brand/mark.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
       );
 }
 

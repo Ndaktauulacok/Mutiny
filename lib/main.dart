@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio_background/just_audio_background.dart';
@@ -16,6 +17,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    // Tell iOS/Android this is a music app: keeps playing when the screen
+    // is locked or the app is in the background, ignores the silent switch,
+    // and pauses/resumes around phone calls and other audio.
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.music());
+
     // Lock-screen / notification controls and background playback.
     await JustAudioBackground.init(
       androidNotificationChannelId: 'com.amreel.mutiny.playback',

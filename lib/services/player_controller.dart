@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
@@ -17,6 +18,16 @@ class PlayerController extends ChangeNotifier {
     _subs.add(player.sequenceStateStream.listen(_onSequence));
     _subs.add(player.playerStateStream.listen((_) => notifyListeners()));
     _subs.add(player.errorStream.listen(_onError));
+    _watchHeadphones();
+  }
+
+  /// Pause when headphones / Bluetooth disconnect, like other music apps.
+  Future<void> _watchHeadphones() async {
+    if (kIsWeb) return;
+    try {
+      final session = await AudioSession.instance;
+      _subs.add(session.becomingNoisyEventStream.listen((_) => player.pause()));
+    } catch (_) {}
   }
 
   final LibraryStore library;

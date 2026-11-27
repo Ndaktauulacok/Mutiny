@@ -319,7 +319,9 @@ class Artwork extends StatelessWidget {
 class FadeRoute<T> extends PageRouteBuilder<T> {
   FadeRoute(Widget page)
       : super(
-          opaque: false,
+          // Opaque: the page below stops painting once this one is in.
+          // Pages are transparent, so the aurora behind the navigator shows.
+          opaque: true,
           transitionDuration: const Duration(milliseconds: 320),
           reverseTransitionDuration: const Duration(milliseconds: 240),
           pageBuilder: (_, _, _) => page,

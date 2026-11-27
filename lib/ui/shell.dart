@@ -88,7 +88,7 @@ class _ShellState extends State<Shell> {
                         HeroControllerScope.none(
                           child: Navigator(
                             key: _navKeys[i],
-                            onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, _, _) => _pages[i]),
+                            onGenerateRoute: (_) => FadeRoute(_pages[i]),
                           ),
                         ),
                     ],
