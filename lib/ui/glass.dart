@@ -242,7 +242,7 @@ class PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = filled ? const Color(0xFF2A0F55) : MColors.text;
+    final fg = filled ? MColors.onAccent : MColors.text;
     final content = Padding(
       padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 20, vertical: compact ? 8 : 11),
       child: Row(
@@ -270,11 +270,7 @@ class PillButton extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(100),
                 gradient: MColors.brand,
-                border: Border.all(color: const Color(0x99FFFFFF), width: 0.8),
-                boxShadow: [
-                  BoxShadow(color: MColors.fuchsia.withValues(alpha: 0.45), blurRadius: 26, offset: const Offset(0, 8)),
-                  BoxShadow(color: MColors.violet.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 3)),
-                ],
+                boxShadow: [BoxShadow(color: MColors.purple.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 6))],
               ),
               child: content,
             )
@@ -301,17 +297,15 @@ class GlassChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(100),
-          gradient: selected ? MColors.brand : null,
-          color: selected ? null : const Color(0x1AFFFFFF),
-          border: Border.all(color: selected ? const Color(0xB3FFFFFF) : MColors.glassBorder, width: 0.8),
-          boxShadow: selected ? [BoxShadow(color: MColors.fuchsia.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 4))] : null,
+          color: selected ? MColors.purple : const Color(0xFF242424),
+          border: Border.all(color: selected ? MColors.purple : const Color(0x1FFFFFFF), width: 0.8),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: selected ? const Color(0xFF2A0F55) : MColors.text,
+            color: selected ? MColors.onAccent : MColors.text,
           ),
         ),
       ),
@@ -435,7 +429,7 @@ Future<T?> showGlassSheet<T>(BuildContext context, {required WidgetBuilder build
           strength: 1.3,
           tint: const Color(0xFF8B5CF6),
           child: DecoratedBox(
-            decoration: const BoxDecoration(color: Color(0x801A0D33)),
+            decoration: const BoxDecoration(color: Color(0xB3121014)),
             child: SafeArea(
               top: false,
               child: Column(

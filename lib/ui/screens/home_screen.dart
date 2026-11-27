@@ -420,7 +420,7 @@ class _JumpBackIn extends StatelessWidget {
                           t.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: MText.title.copyWith(fontSize: 13, color: isCurrent ? MColors.lavender : MColors.text),
+                          style: MText.title.copyWith(fontSize: 13, color: isCurrent ? MColors.purple : MColors.text),
                         ),
                       ),
                       if (isCurrent) const Padding(padding: EdgeInsets.only(right: 10), child: EqualizerBars(size: 12)),

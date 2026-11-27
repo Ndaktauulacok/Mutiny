@@ -133,7 +133,7 @@ class TrackTile extends StatelessWidget {
                     track.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: MText.title.copyWith(color: isCurrent ? MColors.lavender : MColors.text),
+                    style: MText.title.copyWith(color: isCurrent ? MColors.purple : MColors.text),
                   ),
                   const SizedBox(height: 3),
                   Row(

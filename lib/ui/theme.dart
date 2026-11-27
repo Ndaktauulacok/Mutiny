@@ -2,40 +2,45 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Mutiny's palette: deep night purple with lavender light.
+/// Mutiny's palette: Spotify's black-and-green idea, in black and purple.
 abstract final class MColors {
-  static const bg = Color(0xFF110824);
-  static const bgRaised = Color(0xFF1D1036);
-  static const deep = Color(0xFF3B1A78);
-  static const violet = Color(0xFF8B5CF6);
-  static const purple = Color(0xFFB794FF);
-  static const lavender = Color(0xFFD2C2FF);
-  static const lilac = Color(0xFFF4ECFF);
+  static const bg = Color(0xFF000000);
+  static const bgRaised = Color(0xFF121014);
+  static const deep = Color(0xFF2B1155); // dark purple
+  static const violet = Color(0xFF8A3FFC);
+  static const purple = Color(0xFFA259FF); // the accent, like Spotify green
+  static const lavender = Color(0xFFB98AFF);
+  static const lilac = Color(0xFFF2EAFF);
 
-  /// Bright accents that make the purple pop.
-  static const fuchsia = Color(0xFFF07CFF);
-  static const pink = Color(0xFFFF7EB6);
-  static const sky = Color(0xFF7DD8FF);
+  /// Supporting purples (kept as names used across the app).
+  static const fuchsia = Color(0xFFA259FF);
+  static const pink = Color(0xFF7B2CBF);
+  static const sky = Color(0xFF5A189A);
 
-  static const text = Color(0xFFFFFBFF);
-  static const textSecondary = Color(0xD1F0E8FF); // ~82%
-  static const textTertiary = Color(0x99E6DCFF); // ~60%
+  static const text = Color(0xFFFFFFFF);
+  static const textSecondary = Color(0xFFB3B3B3);
+  static const textTertiary = Color(0xFF808080);
 
   static const glassFill = Color(0x14FFFFFF);
-  static const glassBorder = Color(0x40FFFFFF);
-  static const hairline = Color(0x1FFFFFFF);
+  static const glassBorder = Color(0x33FFFFFF);
+  static const hairline = Color(0x1AFFFFFF);
 
-  /// Signature gradient for primary buttons and highlights.
+  /// Primary buttons (Play, Save…): solid bright purple with black text.
   static const brand = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFFBE7FF), Color(0xFFE3B8FF), Color(0xFFB794FF)],
+    colors: [Color(0xFFB57BFF), Color(0xFFA259FF), Color(0xFF9145FF)],
   );
 
+  /// Accent words in headings.
   static const brandVivid = LinearGradient(
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
-    colors: [Color(0xFFB794FF), Color(0xFFF07CFF), Color(0xFFFF9CC8)],
+    colors: [Color(0xFFC79CFF), Color(0xFFA259FF)],
   );
+
+  /// Text/icons drawn on top of the purple accent.
+  static const onAccent = Color(0xFF000000);
 }
 
 abstract final class MText {
@@ -47,7 +52,7 @@ abstract final class MText {
     height: 0.98,
     fontWeight: FontWeight.w700,
     letterSpacing: -1.2,
-    color: MColors.lilac,
+    color: Colors.white,
   );
 
   static const h1 = TextStyle(
@@ -98,8 +103,8 @@ ThemeData buildTheme() {
     brightness: Brightness.dark,
     useMaterial3: true,
     colorScheme: const ColorScheme.dark(
-      primary: MColors.lavender,
-      onPrimary: MColors.bg,
+      primary: MColors.purple,
+      onPrimary: MColors.onAccent,
       secondary: MColors.purple,
       surface: MColors.bgRaised,
       onSurface: MColors.text,
@@ -111,27 +116,27 @@ ThemeData buildTheme() {
   );
   return base.copyWith(
     textSelectionTheme: const TextSelectionThemeData(
-      cursorColor: MColors.lavender,
-      selectionColor: Color(0x55A78BFA),
-      selectionHandleColor: MColors.lavender,
+      cursorColor: MColors.purple,
+      selectionColor: Color(0x55A259FF),
+      selectionHandleColor: MColors.purple,
     ),
     sliderTheme: const SliderThemeData(
       trackHeight: 3,
-      activeTrackColor: MColors.lilac,
+      activeTrackColor: MColors.purple,
       inactiveTrackColor: Color(0x33FFFFFF),
-      thumbColor: MColors.lilac,
+      thumbColor: Colors.white,
       overlayShape: RoundSliderOverlayShape(overlayRadius: 14),
       thumbShape: RoundSliderThumbShape(enabledThumbRadius: 5.5),
       trackShape: RoundedRectSliderTrackShape(),
     ),
     snackBarTheme: const SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: Color(0xF0241640),
+      backgroundColor: Color(0xF0282828),
       contentTextStyle: TextStyle(color: MColors.text, fontWeight: FontWeight.w500),
       shape: StadiumBorder(side: BorderSide(color: MColors.glassBorder)),
       elevation: 0,
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(color: MColors.lavender),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(color: MColors.purple),
   );
 }
 

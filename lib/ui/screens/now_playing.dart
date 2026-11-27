@@ -454,12 +454,8 @@ class _PlayButton extends StatelessWidget {
         height: 78,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: MColors.brand,
-          border: Border.all(color: const Color(0xB3FFFFFF), width: 1),
-          boxShadow: [
-            BoxShadow(color: MColors.fuchsia.withValues(alpha: 0.55), blurRadius: 40, offset: const Offset(0, 10)),
-            BoxShadow(color: MColors.violet.withValues(alpha: 0.5), blurRadius: 16, offset: const Offset(0, 4)),
-          ],
+          color: MColors.purple,
+          boxShadow: [BoxShadow(color: MColors.purple.withValues(alpha: 0.45), blurRadius: 30, offset: const Offset(0, 8))],
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -473,7 +469,7 @@ class _PlayButton extends StatelessWidget {
                 playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 key: ValueKey(playing),
                 size: 42,
-                color: const Color(0xFF2A0F55),
+                color: MColors.onAccent,
               ),
             ),
           ],

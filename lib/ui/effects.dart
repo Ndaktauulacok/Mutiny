@@ -99,29 +99,19 @@ class _AuroraPainter extends CustomPainter {
     final m = math.max(w, h);
     final blobs = <(Offset, double, Color)>[
       (
-        Offset(w * (0.12 + 0.25 * math.sin(t * 0.9)), h * (0.08 + 0.08 * math.cos(t * 0.7))),
-        m * 0.8,
-        Color.lerp(MColors.violet, accent, 0.4)!.withValues(alpha: 0.85),
+        Offset(w * (0.15 + 0.2 * math.sin(t * 0.9)), h * (0.02 + 0.06 * math.cos(t * 0.7))),
+        m * 0.75,
+        Color.lerp(MColors.deep, accent, 0.35)!.withValues(alpha: 0.75),
       ),
       (
-        Offset(w * (0.98 + 0.15 * math.cos(t * 0.6)), h * (0.30 + 0.15 * math.sin(t * 0.8))),
-        m * 0.62,
-        Color.lerp(MColors.fuchsia, accent, 0.3)!.withValues(alpha: 0.55),
+        Offset(w * (0.95 + 0.12 * math.cos(t * 0.6)), h * (0.25 + 0.12 * math.sin(t * 0.8))),
+        m * 0.5,
+        Color.lerp(MColors.violet, accent, 0.3)!.withValues(alpha: 0.22),
       ),
       (
-        Offset(w * (0.25 + 0.3 * math.cos(t * 0.5 + 1)), h * (0.78 + 0.1 * math.sin(t * 0.65))),
-        m * 0.7,
-        const Color(0xFF5B3BFF).withValues(alpha: 0.6),
-      ),
-      (
-        Offset(w * (0.8 + 0.2 * math.sin(t * 1.1 + 2)), h * (0.62 + 0.12 * math.cos(t * 0.9))),
-        m * 0.42,
-        Color.lerp(MColors.pink, accent, 0.25)!.withValues(alpha: 0.38),
-      ),
-      (
-        Offset(w * (0.5 + 0.35 * math.sin(t * 0.4 + 4)), h * (0.45 + 0.2 * math.cos(t * 0.55 + 1))),
-        m * 0.3,
-        MColors.sky.withValues(alpha: 0.18),
+        Offset(w * (0.3 + 0.25 * math.cos(t * 0.5 + 1)), h * (0.85 + 0.08 * math.sin(t * 0.65))),
+        m * 0.55,
+        MColors.deep.withValues(alpha: 0.35),
       ),
     ];
     for (final (center, radius, color) in blobs) {
@@ -132,15 +122,15 @@ class _AuroraPainter extends CustomPainter {
           ..shader = ui.Gradient.radial(center, radius, [color, color.withValues(alpha: 0)]),
       );
     }
-    // Gentle shade at the bottom keeps text readable over the tab bar.
+    // Fade to black toward the bottom, like Spotify.
     canvas.drawRect(
       Offset.zero & size,
       Paint()
         ..shader = ui.Gradient.linear(
           Offset(0, 0),
           Offset(0, h),
-          [const Color(0x00110824), const Color(0x00110824), const Color(0x99110824)],
-          [0, 0.55, 1],
+          [const Color(0x00000000), const Color(0x66000000), const Color(0xE6000000)],
+          [0, 0.45, 1],
         ),
     );
   }

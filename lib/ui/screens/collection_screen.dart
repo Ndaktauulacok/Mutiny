@@ -770,14 +770,14 @@ Widget gradientCover(IconData icon, {List<Color>? colors}) =>
     colors == null ? _GradientCover(icon: icon) : _GradientCover(icon: icon, colors: colors);
 
 const _genrePalette = [
-  Color(0xFF8B5CF6),
-  Color(0xFF6D28D9),
-  Color(0xFFC084FC),
-  Color(0xFFD946EF),
-  Color(0xFF7C3AED),
-  Color(0xFF6366F1),
-  Color(0xFFA855F7),
-  Color(0xFF9333EA),
+  Color(0xFF8A3FFC),
+  Color(0xFF6A1FD1),
+  Color(0xFFA259FF),
+  Color(0xFF5A189A),
+  Color(0xFF7B2CBF),
+  Color(0xFF9D4EDD),
+  Color(0xFF3C096C),
+  Color(0xFFB57BFF),
 ];
 
 Color genreColor(String genre) => _genrePalette[genre.codeUnits.fold<int>(0, (a, b) => a + b) % _genrePalette.length];

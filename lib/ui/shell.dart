@@ -82,7 +82,7 @@ class _ShellState extends State<Shell> {
         if (_tab != 0) setState(() => _tab = 0);
       },
       child: Scaffold(
-        backgroundColor: MColors.bg,
+        backgroundColor: Colors.black,
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
@@ -177,10 +177,9 @@ class _TabBar extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [MColors.fuchsia.withValues(alpha: 0.38), MColors.violet.withValues(alpha: 0.30)],
+                      colors: [MColors.purple.withValues(alpha: 0.45), MColors.violet.withValues(alpha: 0.25)],
                     ),
-                    border: Border.all(color: const Color(0x80FFFFFF), width: 0.9),
-                    boxShadow: [BoxShadow(color: MColors.fuchsia.withValues(alpha: 0.35), blurRadius: 16)],
+                    border: Border.all(color: const Color(0x66FFFFFF), width: 0.9),
                   ),
                 ),
               ),
@@ -209,7 +208,7 @@ class _TabBar extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
-                                  color: i == index ? MColors.lilac : MColors.textTertiary,
+                                  color: i == index ? Colors.white : MColors.textTertiary,
                                 ),
                               ),
                             ],
@@ -342,7 +341,7 @@ class MiniPlayer extends StatelessWidget {
                                     height: 2.2,
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(2),
-                                      gradient: const LinearGradient(colors: [MColors.purple, MColors.lilac]),
+                                      color: MColors.purple,
                                     ),
                                   ),
                                 ),
