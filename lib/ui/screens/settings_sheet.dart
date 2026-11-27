@@ -36,7 +36,7 @@ void showSettingsSheet(BuildContext context) {
             const _InfoRow(
               icon: Icons.folder_rounded,
               title: 'Your files',
-              text: 'Music you import stays on this device only.',
+              text: 'Songs you add are private. Sign in to have them on all your devices.',
             ),
             const Divider(color: MColors.hairline, height: 28),
             SheetAction(

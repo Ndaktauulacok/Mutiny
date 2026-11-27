@@ -15,7 +15,8 @@ import '../theme.dart';
 import '../widgets.dart';
 
 /// Add your own song (audio file + name, artist, cover, lyrics), or edit
-/// one you added before. Own songs stay private on this device.
+/// one you added before. Own songs are private to your account and sync to
+/// your other devices when signed in.
 class AddSongScreen extends StatefulWidget {
   const AddSongScreen({super.key, this.editing});
 
@@ -341,7 +342,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Only you can see this song. It stays on this device and is never published. You can add it to any playlist.',
+                    'Only you can see this song. It is never published. When you are signed in, it is on all your devices. You can add it to any playlist.',
                     style: MText.caption.copyWith(color: MColors.textSecondary),
                   ),
                 ),

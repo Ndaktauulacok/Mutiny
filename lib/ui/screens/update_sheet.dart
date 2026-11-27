@@ -9,17 +9,25 @@ import '../../services/updater.dart';
 import '../glass.dart';
 import '../theme.dart';
 
-bool _checkedThisLaunch = false;
+DateTime? _lastAutoCheck;
+int? _shownBuild;
 
-/// Quietly checks GitHub for a newer Mutiny once per launch.
+/// Quietly checks GitHub for a newer Mutiny at start-up and whenever the app
+/// comes back to the screen (at most every 3 hours). iPhones rarely restart
+/// an app, so checking only at launch meant they never saw updates.
 Future<void> autoCheckForUpdate(BuildContext context) async {
-  if (_checkedThisLaunch || kIsWeb) return;
-  _checkedThisLaunch = true;
+  if (kIsWeb) return;
+  final now = DateTime.now();
+  if (_lastAutoCheck != null && now.difference(_lastAutoCheck!) < const Duration(hours: 3)) return;
+  _lastAutoCheck = now;
   try {
     final info = await Updater.check();
-    if (info != null && context.mounted) showUpdateSheet(context, info);
+    if (info == null || !context.mounted || _shownBuild == info.build) return;
+    _shownBuild = info.build;
+    showUpdateSheet(context, info);
   } catch (_) {
-    // Offline or GitHub unreachable: try again next launch.
+    // Offline or GitHub unreachable: try again later.
+    _lastAutoCheck = null;
   }
 }
 
@@ -74,13 +82,18 @@ class _UpdateViewState extends State<_UpdateView> {
     });
     final stream = Platform.isAndroid ? Updater.installAndroid(url) : Updater.installWindows(url);
     _sub = stream.listen(
-      (p) => setState(() => _progress = p),
-      onError: (Object e) => setState(() {
-        _progress = null;
-        _error = Platform.isAndroid
-            ? "Couldn't install. Allow Mutiny to install apps when Android asks, then try again."
-            : "Couldn't update. Download it from the release page instead.";
-      }),
+      (p) {
+        if (mounted) setState(() => _progress = p);
+      },
+      onError: (Object e) {
+        if (!mounted) return;
+        setState(() {
+          _progress = null;
+          _error = Platform.isAndroid
+              ? "Couldn't install. Allow Mutiny to install apps when Android asks, then try again."
+              : "Couldn't update ($e). If Mutiny is in Program Files, move the folder to Documents, or download it from the release page.";
+        });
+      },
       onDone: () {
         if (mounted && Platform.isAndroid) Navigator.maybePop(context);
       },

@@ -47,6 +47,9 @@ class CloudSync extends ChangeNotifier {
   /// this device's file path → path in cloud storage.
   Map<String, String> _files = {};
 
+  /// Files whose upload failed; retried on the next full sync.
+  Set<String> _failedUploads = {};
+
   SyncStatus status = SyncStatus.signedOut;
   DateTime? lastSync;
   String? error;
@@ -173,17 +176,19 @@ class CloudSync extends ChangeNotifier {
       final raw = _prefs?.getString('mutiny.sync.state.$uid');
       final j = raw == null ? const {} : jsonDecode(raw) as Map;
       _synced = Map<String, String>.from((j['synced'] as Map?) ?? const {});
-      _files = Map<String, String>.from((j['files'] as Map?) ?? const {});
+      _files = Map<String, String>.from((j['files'] as Map?) ?? const {})..removeWhere((_, v) => !_validKey(v));
+      _failedUploads = Set<String>.from((j['failed'] as List?) ?? const []);
     } catch (_) {
       _synced = {};
       _files = {};
+      _failedUploads = {};
     }
   }
 
   Future<void> _saveState() async {
     final uid = user?.id;
     if (uid == null) return;
-    await _prefs?.setString('mutiny.sync.state.$uid', jsonEncode({'synced': _synced, 'files': _files}));
+    await _prefs?.setString('mutiny.sync.state.$uid', jsonEncode({'synced': _synced, 'files': _files, 'failed': _failedUploads.toList()}));
   }
 
   Future<void> _enqueue(Future<void> Function() op) {
@@ -230,6 +235,7 @@ class CloudSync extends ChangeNotifier {
         if (plan.apply.isNotEmpty) library.refresh();
 
         await _push(plan.push, uid);
+        await _retryFailedUploads(uid);
 
         // Everything now matches the cloud.
         _synced = {
@@ -344,8 +350,26 @@ class CloudSync extends ChangeNotifier {
   // ---------------------------------------------------------------- files
   bool _isOurFile(String s) => _docs != null && s.startsWith(_docs!) && !s.startsWith('http');
 
-  String _cloudPathFor(String local, String uid) =>
-      _files[local] ?? '$uid/${local.split(Platform.pathSeparator).last}';
+  /// Storage keys may only use plain characters: "14 - twenty one pilots.mp3"
+  /// was rejected (400 Invalid key) and blocked every later sync.
+  static String safeKeyName(String name) {
+    final dot = name.lastIndexOf('.');
+    final base = dot > 0 ? name.substring(0, dot) : name;
+    final ext = dot > 0 ? name.substring(dot + 1).toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') : '';
+    var clean = base.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_').replaceAll(RegExp(r'_+'), '_');
+    clean = clean.replaceAll(RegExp(r'^[_.]+|[_.]+$'), '');
+    if (clean.isEmpty) clean = 'file';
+    if (clean.length > 80) clean = clean.substring(0, 80);
+    return ext.isEmpty ? clean : '$clean.$ext';
+  }
+
+  static bool _validKey(String key) => RegExp(r'^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$').hasMatch(key);
+
+  String _cloudPathFor(String local, String uid) {
+    final mapped = _files[local];
+    if (mapped != null && _validKey(mapped)) return mapped;
+    return '$uid/${safeKeyName(local.split(Platform.pathSeparator).last)}';
+  }
 
   /// This device's items with local file paths swapped for `cloud:` paths.
   Map<String, Map<String, dynamic>> _localCloudForm(String uid) {
@@ -391,14 +415,38 @@ class CloudSync extends ChangeNotifier {
 
     walk(data);
     for (final cloud in paths) {
-      if (_files.values.contains(cloud) && (_prefs?.getBool('mutiny.sync.up.$cloud') ?? false)) continue;
-      final local = _localPathFor(cloud, uid);
-      if (local == null) continue;
-      final f = File(local);
-      if (!f.existsSync() || f.lengthSync() > CloudConfig.maxFileBytes) continue;
+      await _uploadOne(cloud, uid);
+    }
+  }
+
+  /// Uploads one file. A file that can't be uploaded never blocks the rest
+  /// of the library from syncing; it is remembered and retried later.
+  Future<void> _uploadOne(String cloud, String uid) async {
+    if (_files.values.contains(cloud) && (_prefs?.getBool('mutiny.sync.up.$cloud') ?? false)) return;
+    final local = _localPathFor(cloud, uid);
+    if (local == null) return;
+    final f = File(local);
+    if (!f.existsSync() || f.lengthSync() > CloudConfig.maxFileBytes) {
+      _failedUploads.remove(cloud);
+      return;
+    }
+    try {
       await _client!.storage.from(CloudConfig.bucket).upload(cloud, f, fileOptions: const FileOptions(upsert: true));
       _files[local] = cloud;
+      _failedUploads.remove(cloud);
       await _prefs?.setBool('mutiny.sync.up.$cloud', true);
+    } on StorageException catch (e) {
+      debugPrint('Upload failed for $cloud: ${e.message}');
+      _failedUploads.add(cloud);
+    } on SocketException {
+      _failedUploads.add(cloud);
+      rethrow; // offline: the whole sync retries later
+    }
+  }
+
+  Future<void> _retryFailedUploads(String uid) async {
+    for (final cloud in _failedUploads.toList()) {
+      await _uploadOne(cloud, uid);
     }
   }
 
@@ -409,10 +457,20 @@ class CloudSync extends ChangeNotifier {
     // Not mapped yet: find the file by name in our folders.
     final name = cloud.split('/').last;
     for (final dir in ['mutiny_images', 'mutiny_music', 'mutiny_cloud']) {
-      final p = '$_docs${Platform.pathSeparator}$dir${Platform.pathSeparator}$name';
-      if (File(p).existsSync()) {
-        _files[p] = cloud;
-        return p;
+      final folder = Directory('$_docs${Platform.pathSeparator}$dir');
+      final exact = File('${folder.path}${Platform.pathSeparator}$name');
+      if (exact.existsSync()) {
+        _files[exact.path] = cloud;
+        return exact.path;
+      }
+      // The cloud name may be a cleaned-up version of the real file name.
+      if (folder.existsSync()) {
+        for (final e in folder.listSync().whereType<File>()) {
+          if (safeKeyName(e.path.split(Platform.pathSeparator).last) == name) {
+            _files[e.path] = cloud;
+            return e.path;
+          }
+        }
       }
     }
     return null;

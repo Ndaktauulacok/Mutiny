@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:audio_session/audio_session.dart';
@@ -8,6 +9,7 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import 'services/updater.dart';
 import 'services/cloud_sync.dart';
 import 'services/library_store.dart';
 import 'services/player_controller.dart';
@@ -36,6 +38,7 @@ Future<void> main() async {
     // Windows/Linux audio engine (libmpv via media_kit).
     JustAudioMediaKit.ensureInitialized(windows: true, linux: true);
     JustAudioMediaKit.title = 'Mutiny';
+    unawaited(Updater.cleanUpOldFiles());
   }
 
   SystemChrome.setSystemUIOverlayStyle(lightStatusBar);

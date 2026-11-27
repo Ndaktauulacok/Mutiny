@@ -39,7 +39,10 @@ class _ShellState extends State<Shell> {
     };
     player.addListener(_updateAccent);
     // Catch up on changes made on other devices while the app was closed.
-    _lifecycle = AppLifecycleListener(onResume: () => context.read<CloudSync>().onResume());
+    _lifecycle = AppLifecycleListener(onResume: () {
+      context.read<CloudSync>().onResume();
+      autoCheckForUpdate(context);
+    });
     // Look for a newer Mutiny on GitHub a few seconds after start-up.
     Future.delayed(const Duration(seconds: 4), () {
       if (mounted) autoCheckForUpdate(context);
