@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
 
 import 'package:material_ui/material_ui.dart';
 
@@ -289,9 +292,14 @@ class Artwork extends StatelessWidget {
         ),
       ),
     );
+    final isFile = url != null && url!.isNotEmpty && !url!.startsWith('http');
     Widget img = url == null || url!.isEmpty
         ? placeholder
-        : Image.network(
+        : isFile
+            ? (kIsWeb || !File(url!).existsSync()
+                ? placeholder
+                : Image.file(File(url!), fit: fit, gaplessPlayback: true, errorBuilder: (_, _, _) => placeholder))
+            : Image.network(
             url!,
             fit: fit,
             gaplessPlayback: true,

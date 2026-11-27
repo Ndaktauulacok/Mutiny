@@ -157,4 +157,44 @@ void main() {
     expect(again.topArtists().first.$1, 'A');
     expect(again.totalListenMinutes, 4);
   });
+
+  test('Own songs: add with lyrics, use in playlists, edit everywhere, delete', () async {
+    SharedPreferences.setMockInitialValues({});
+    final lib = LibraryStore();
+    await lib.load();
+    lib.setProfileName('Amreel');
+    final song = lib.addOwnSong(
+      audioPath: '/tmp/does-not-matter.mp3',
+      title: 'Lagu Raya Kita',
+      artist: '',
+      lyrics: '[00:05] Selamat hari raya\n[00:10] Maaf zahir batin',
+      durationSec: 180,
+    );
+    expect(song.isLocal, isTrue);
+    expect(song.artist, 'Amreel'); // defaults to the profile name
+    expect(lib.localTracks.first, song);
+    expect(LyricsApi.parseLrc(lib.lyricsFor(song)!), hasLength(2));
+
+    final p = lib.createPlaylist('Raya');
+    expect(lib.addToPlaylist(p, song), isTrue);
+    lib.toggleLike(song);
+
+    final edited = lib.updateOwnSong(song, title: 'Lagu Raya 2026', artist: 'Amreel & Fahri', lyrics: 'Plain words');
+    expect(lib.localTracks.first.title, 'Lagu Raya 2026');
+    expect(p.tracks.single.title, 'Lagu Raya 2026');
+    expect(lib.liked.single.artist, 'Amreel & Fahri');
+    expect(lib.lyricsFor(edited), 'Plain words');
+
+    final again = LibraryStore();
+    await again.load();
+    expect(again.localTracks.single.title, 'Lagu Raya 2026');
+    expect(again.playlists.single.tracks.single.title, 'Lagu Raya 2026');
+    expect(again.lyricsFor(again.localTracks.single), 'Plain words');
+
+    await again.removeLocal(again.localTracks.single);
+    expect(again.localTracks, isEmpty);
+    expect(again.playlists.single.tracks, isEmpty);
+    expect(again.liked, isEmpty);
+    expect(again.lyricsFor(edited), isNull);
+  });
 }

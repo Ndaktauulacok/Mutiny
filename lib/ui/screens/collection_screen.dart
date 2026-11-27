@@ -14,6 +14,7 @@ import '../effects.dart';
 import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'add_song_screen.dart';
 
 enum CollectionKind { remote, artist, genre, mix, liked, local, userPlaylist, recent }
 
@@ -69,8 +70,9 @@ class CollectionScreen extends StatefulWidget {
 
   factory CollectionScreen.local() => const CollectionScreen._(
         kind: CollectionKind.local,
-        title: 'On this device',
-        cover: _GradientCover(icon: Icons.folder_rounded, colors: [Color(0xFF312E81), Color(0xFF7C3AED)]),
+        title: 'My songs',
+        subtitle: 'Only you can see these',
+        cover: _GradientCover(icon: Icons.library_music_rounded, colors: [Color(0xFF312E81), Color(0xFF7C3AED)]),
       );
 
   factory CollectionScreen.recent() => const CollectionScreen._(
@@ -157,8 +159,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
         final mins = playlist!.totalSeconds ~/ 60;
         final len = mins >= 60 ? '${mins ~/ 60} hr ${mins % 60} min' : '$mins min';
         return '${lib.profile.name} · $songs${mins > 0 ? ' · $len' : ''}';
-      case CollectionKind.liked:
       case CollectionKind.local:
+        return '$songs · only you can see these';
+      case CollectionKind.liked:
       case CollectionKind.recent:
         return songs;
       default:
@@ -214,7 +217,11 @@ class _CollectionScreenState extends State<CollectionScreen> {
                     GlassIconButton(icon: Icons.arrow_back_ios_new_rounded, iconSize: 17, onTap: () => Navigator.maybePop(context)),
                     const Spacer(),
                     if (widget.kind == CollectionKind.local)
-                      GlassIconButton(icon: Icons.add_rounded, tooltip: 'Import files', onTap: () => _import(context)),
+                      GlassIconButton(
+                        icon: Icons.add_rounded,
+                        tooltip: 'Add your song',
+                        onTap: () => Navigator.of(context).push(FadeRoute(const AddSongScreen())),
+                      ),
                     if (playlist != null)
                       GlassIconButton(icon: Icons.more_horiz_rounded, onTap: () => _playlistMenu(context, playlist)),
                     if (widget.kind == CollectionKind.recent && (tracks?.isNotEmpty ?? false))
@@ -636,7 +643,11 @@ class _AddSongsViewState extends State<_AddSongsView> {
                 if (snap.connectionState != ConnectionState.done) {
                   return const Center(child: CircularProgressIndicator(strokeWidth: 2));
                 }
-                final list = snap.data ?? const <Track>[];
+                final q = _query.toLowerCase();
+                final mine = lib.localTracks
+                    .where((t) => q.isEmpty || t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q))
+                    .toList();
+                final list = [...mine, ...?snap.data];
                 if (list.isEmpty) return const Center(child: Text('No songs found', style: MText.body));
                 return ListView.builder(
                   padding: const EdgeInsets.only(bottom: 20),
@@ -648,14 +659,14 @@ class _AddSongsViewState extends State<_AddSongsView> {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
                       child: Row(
                         children: [
-                          Artwork(url: t.artworkUrl, size: 48, radius: 8),
+                          Artwork(url: t.artworkUrl, size: 48, radius: 8, icon: t.isLocal ? Icons.library_music_rounded : Icons.music_note_rounded),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: MText.title),
-                                Text(t.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: MText.caption),
+                                Text(t.isLocal ? 'My song · ${t.artist}' : t.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: MText.caption),
                               ],
                             ),
                           ),
@@ -703,7 +714,7 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, text) = switch (kind) {
       CollectionKind.liked => (Icons.favorite_border_rounded, 'Songs you like will show up here.\nTap ♡ on any song.'),
-      CollectionKind.local => (Icons.audio_file_rounded, 'Add MP3, M4A, FLAC or WAV files\nfrom your device.'),
+      CollectionKind.local => (Icons.library_music_rounded, 'Add your own songs with a name, cover\nand lyrics. Only you can see them.'),
       CollectionKind.userPlaylist => (Icons.playlist_add_rounded, "Let's find some songs for your playlist."),
       CollectionKind.recent => (Icons.history_rounded, 'Nothing played yet.'),
       _ => (Icons.music_off_rounded, 'No songs here.'),
@@ -717,7 +728,14 @@ class _EmptyState extends StatelessWidget {
           Text(text, style: MText.body, textAlign: TextAlign.center),
           if (kind == CollectionKind.local) ...[
             const SizedBox(height: 20),
-            PillButton(label: 'Import files', icon: Icons.add_rounded, filled: true, onTap: onImport),
+            PillButton(
+              label: 'Add a song',
+              icon: Icons.add_rounded,
+              filled: true,
+              onTap: () => Navigator.of(context).push(FadeRoute(const AddSongScreen())),
+            ),
+            const SizedBox(height: 10),
+            PillButton(label: 'Import many files', icon: Icons.drive_folder_upload_rounded, compact: true, onTap: onImport),
           ],
           if (onAddSongs != null) ...[
             const SizedBox(height: 20),

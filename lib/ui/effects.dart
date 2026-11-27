@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -496,7 +497,8 @@ Future<Color?> accentFromImage(String? url) async {
   if (url == null || url.isEmpty) return null;
   if (_accentCache.containsKey(url)) return _accentCache[url];
   try {
-    final provider = ResizeImage(NetworkImage(url), width: 32, height: 32);
+    final ImageProvider base = url.startsWith('http') ? NetworkImage(url) : FileImage(File(url));
+    final provider = ResizeImage(base, width: 32, height: 32);
     final stream = provider.resolve(ImageConfiguration.empty);
     final completer = Completer<ui.Image>();
     late final ImageStreamListener listener;

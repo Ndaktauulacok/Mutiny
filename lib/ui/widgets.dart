@@ -10,6 +10,7 @@ import '../services/library_store.dart';
 import '../services/player_controller.dart';
 import 'effects.dart';
 import 'glass.dart';
+import 'screens/add_song_screen.dart';
 import 'screens/collection_screen.dart';
 import 'theme.dart';
 
@@ -135,7 +136,7 @@ class TrackTile extends StatelessWidget {
                     children: [
                       if (track.isLive) ...[const _LiveDot(), const SizedBox(width: 6)],
                       if (track.isLocal) ...[
-                        const Icon(Icons.download_done_rounded, size: 13, color: MColors.lavender),
+                        const Icon(Icons.lock_rounded, size: 12, color: MColors.lavender),
                         const SizedBox(width: 4),
                       ],
                       Expanded(
@@ -479,8 +480,17 @@ Future<void> showTrackMenu(BuildContext context, Track track, {UserPlaylist? pla
               ),
             if (track.isLocal)
               SheetAction(
+                icon: Icons.edit_note_rounded,
+                label: 'Edit song details',
+                onTap: () {
+                  close();
+                  navigator.push(FadeRoute(AddSongScreen(editing: track)));
+                },
+              ),
+            if (track.isLocal)
+              SheetAction(
                 icon: Icons.delete_outline_rounded,
-                label: 'Remove from this device',
+                label: 'Delete from My songs',
                 danger: true,
                 onTap: () {
                   close();

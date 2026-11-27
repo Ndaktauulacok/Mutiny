@@ -104,7 +104,7 @@ class PlayerController extends ChangeNotifier {
       title: t.title,
       artist: t.artist,
       album: t.isLive ? 'Live radio' : (t.genre ?? 'Mutiny'),
-      artUri: art == null ? null : Uri.tryParse(art),
+      artUri: art == null ? null : (art.startsWith('http') ? Uri.tryParse(art) : Uri.file(art)),
       duration: t.durationSec == null ? null : Duration(seconds: t.durationSec!),
       extras: {'track': jsonEncode(t.toJson())},
     );

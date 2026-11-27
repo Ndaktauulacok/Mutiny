@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../services/library_store.dart';
 import '../../services/lyrics_api.dart';
 import '../../services/player_controller.dart';
 import '../effects.dart';
@@ -35,7 +36,10 @@ class LyricsView extends StatefulWidget {
 }
 
 class _LyricsViewState extends State<LyricsView> {
-  late final Future<Lyrics?> _future = LyricsApi().find(widget.track);
+  late final String? _own = context.read<LibraryStore>().lyricsFor(widget.track);
+  late final Future<Lyrics?> _future = _own != null
+      ? Future.value(Lyrics(synced: LyricsApi.parseLrc(_own), plain: _own.replaceAll(RegExp(r'\[\d+:\d+(?:\.\d+)?\]'), '').trim()))
+      : LyricsApi().find(widget.track);
   final _scroll = ScrollController();
   final _keys = <int, GlobalKey>{};
   int _active = -1;
@@ -122,7 +126,7 @@ class _LyricsViewState extends State<LyricsView> {
                               Icon(Icons.lyrics_outlined, color: MColors.lavender, size: 40),
                               SizedBox(height: 14),
                               Text(
-                                "No lyrics for this song yet.\nLyrics come from LRCLIB, which mostly has well-known songs.",
+                                "No lyrics for this song yet.\nLyrics come from LRCLIB, which mostly has well-known songs. For your own songs, add lyrics with Edit song details.",
                                 style: MText.body,
                                 textAlign: TextAlign.center,
                               ),
@@ -191,7 +195,7 @@ class _LyricsViewState extends State<LyricsView> {
           bottom: pad.bottom + 10,
           left: 0,
           right: 0,
-          child: const Text('Lyrics by LRCLIB', style: MText.caption, textAlign: TextAlign.center),
+          child: Text(_own != null ? 'Your lyrics' : 'Lyrics by LRCLIB', style: MText.caption, textAlign: TextAlign.center),
         ),
       ],
     );

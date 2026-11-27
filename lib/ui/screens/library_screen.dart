@@ -6,6 +6,7 @@ import '../../services/player_controller.dart';
 import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'add_song_screen.dart';
 import 'collection_screen.dart';
 import 'profile_screen.dart';
 
@@ -58,6 +59,35 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _open(Widget page) => Navigator.of(context).push(FadeRoute(page));
+
+  void _createMenu() {
+    showGlassSheet(
+      context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          SheetAction(
+            icon: Icons.queue_music_rounded,
+            label: 'Create playlist',
+            onTap: () {
+              Navigator.pop(ctx);
+              _newPlaylist();
+            },
+          ),
+          SheetAction(
+            icon: Icons.library_add_rounded,
+            label: 'Add your own song',
+            onTap: () {
+              Navigator.pop(ctx);
+              _open(const AddSongScreen());
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
 
   List<_Item> _items(LibraryStore lib, PlayerController player) {
     final me = lib.profile.name;
@@ -112,9 +142,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     if (_filter == _Filter.all) {
       items.add(_Item(
-        title: 'On this device',
-        subtitle: '${lib.localTracks.length} ${lib.localTracks.length == 1 ? 'file' : 'files'}',
-        cover: gradientCover(Icons.folder_rounded, colors: const [Color(0xFF312E81), Color(0xFF7C3AED)]),
+        title: 'My songs',
+        subtitle: '${songs(lib.localTracks.length)} · only you',
+        cover: gradientCover(Icons.library_music_rounded, colors: const [Color(0xFF312E81), Color(0xFF7C3AED)]),
         pinned: true,
         order: -2,
         creator: me,
@@ -205,7 +235,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
                 const SizedBox(width: 12),
                 const Expanded(child: Text('Your Library', style: MText.h1)),
-                GlassIconButton(icon: Icons.add_rounded, onTap: _newPlaylist, tooltip: 'New playlist'),
+                GlassIconButton(icon: Icons.add_rounded, onTap: _createMenu, tooltip: 'Create'),
               ],
             ),
           ),
@@ -222,7 +252,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   (_Filter.playlists, 'Playlists'),
                   (_Filter.artists, 'Artists'),
                   (_Filter.stations, 'Stations'),
-                  (_Filter.files, 'Files'),
+                  (_Filter.files, 'My songs'),
                 ])
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -243,15 +273,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     icon: const Icon(Icons.swap_vert_rounded, size: 18, color: MColors.text),
                     label: Text(sortLabel, style: MText.title.copyWith(fontSize: 13)),
                   ),
-                if (_filter == _Filter.files)
+                if (_filter == _Filter.files) ...[
+                  TextButton.icon(
+                    onPressed: () => _open(const AddSongScreen()),
+                    icon: const Icon(Icons.add_rounded, size: 18, color: MColors.lavender),
+                    label: Text('Add song', style: MText.title.copyWith(fontSize: 13, color: MColors.lavender)),
+                  ),
                   TextButton.icon(
                     onPressed: () async {
                       final n = await lib.importLocalFiles();
                       if (context.mounted && n > 0) toast(context, 'Added $n ${n == 1 ? 'song' : 'songs'}');
                     },
-                    icon: const Icon(Icons.add_rounded, size: 18, color: MColors.lavender),
-                    label: Text('Import files', style: MText.title.copyWith(fontSize: 13, color: MColors.lavender)),
+                    icon: const Icon(Icons.drive_folder_upload_rounded, size: 18, color: MColors.textSecondary),
+                    label: Text('Import many', style: MText.title.copyWith(fontSize: 13, color: MColors.textSecondary)),
                   ),
+                ],
                 const Spacer(),
                 if (_filter != _Filter.files)
                   IconButton(
@@ -275,7 +311,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.all(36),
-                child: Text('Import MP3, M4A, FLAC or WAV files from your device.', style: MText.body, textAlign: TextAlign.center),
+                child: Text('Add your own songs with a name, cover and lyrics. Only you can see them.', style: MText.body, textAlign: TextAlign.center),
               ),
             ),
         ] else if (_grid)

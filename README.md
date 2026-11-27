@@ -7,7 +7,7 @@ Music comes from free and legal sources:
 
 - **Audius**: millions of songs from independent artists, streamed for free
 - **Live radio**: thousands of stations worldwide, including Malaysian ones (Sinar, 988, Hot FM…)
-- **Your own files**: MP3 / M4A / FLAC / WAV you import (they stay on your device)
+- **Your own songs**: MP3 / M4A / FLAC / WAV you add with your own name, cover and lyrics (they stay on your device)
 
 ## Features
 
@@ -21,7 +21,10 @@ Music comes from free and legal sources:
 - **Library**: Liked Songs, playlists, saved Audius playlists, followed artists, saved
   stations and files, with filters, Recents / A–Z / Creator sorting and a grid view
 - **Follow** artists and **Save** other people's playlists
-- **Lyrics** that scroll with the song (tap a line to jump), from LRCLIB
+- **Add your own song**: audio file + name, artist, cover picture and lyrics (timed `[mm:ss]`
+  lyrics scroll with the song). Private to your device, never published, and you can put it
+  in any playlist. Edit or delete it later from the song's ••• menu
+- **Lyrics** that scroll with the song (tap a line to jump), from LRCLIB or your own
 - **Share** songs, and **song radio** (similar songs from the same artist and genre)
 - Full-screen player: blurred-cover background that takes the song's colour, shuffle, repeat / repeat-one, seek
 - Queue: play next, add to queue, drag to reorder, swipe to remove

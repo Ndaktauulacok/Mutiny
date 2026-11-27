@@ -23,6 +23,7 @@ class LibraryStore extends ChangeNotifier {
   static const _kArtists = 'mutiny.artists';
   static const _kSavedPlaylists = 'mutiny.savedPlaylists';
   static const _kStats = 'mutiny.stats';
+  static const _kLyrics = 'mutiny.lyrics';
 
   SharedPreferences? _prefs;
 
@@ -37,6 +38,9 @@ class LibraryStore extends ChangeNotifier {
   final Map<String, PlayStat> stats = {};
   Profile profile = Profile(name: 'Listener');
 
+  /// Lyrics the user typed for their own songs, by track key.
+  final Map<String, String> ownLyrics = {};
+
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
     liked.addAll(_readTracks(_kLiked));
@@ -47,6 +51,12 @@ class LibraryStore extends ChangeNotifier {
     profile = _readJson(_kProfile, Profile.fromJson) ?? Profile(name: 'Listener');
     followedArtists.addAll(_readList(_kArtists, Artist.fromJson));
     savedPlaylists.addAll(_readList(_kSavedPlaylists, Collection.fromJson));
+    final lyr = _prefs!.getString(_kLyrics);
+    if (lyr != null) {
+      try {
+        ownLyrics.addAll(Map<String, String>.from(jsonDecode(lyr) as Map));
+      } catch (_) {}
+    }
     for (final st in _readList(_kStats, PlayStat.fromJson)) {
       stats[st.track.key] = st;
     }
@@ -449,9 +459,126 @@ class LibraryStore extends ChangeNotifier {
     return added;
   }
 
+  // ------------------------------------------------------------ own songs
+  /// Asks for one audio file and copies it into the app. Returns its new
+  /// path and original file name, or null if cancelled.
+  Future<(String path, String name)?> pickSongFile() async {
+    if (kIsWeb) return null;
+    final picked = await FilePicker.pickFiles(type: FileType.audio);
+    if (picked.isEmpty) return null;
+    final f = picked.first;
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}${Platform.pathSeparator}mutiny_music');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    final safeName = f.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final dest = File('${dir.path}${Platform.pathSeparator}${DateTime.now().millisecondsSinceEpoch}_$safeName');
+    final src = f.path;
+    if (src != null && File(src).existsSync()) {
+      await File(src).copy(dest.path);
+    } else {
+      await dest.writeAsBytes(await f.xFile.readAsBytes());
+    }
+    return (dest.path, f.name);
+  }
+
+  /// Lets the user pick a cover picture for one of their songs.
+  Future<String?> pickSongCover({ImageSource source = ImageSource.gallery}) => _pickImage('song', source);
+
+  /// Saves a song the user added themselves. It stays on this device only.
+  Track addOwnSong({
+    required String audioPath,
+    required String title,
+    required String artist,
+    String? coverPath,
+    String lyrics = '',
+    int? durationSec,
+  }) {
+    final t = Track(
+      id: 'own_${DateTime.now().microsecondsSinceEpoch}',
+      title: title.trim().isEmpty ? 'Untitled' : title.trim(),
+      artist: artist.trim().isEmpty ? profile.name : artist.trim(),
+      artworkUrl: coverPath,
+      artworkLargeUrl: coverPath,
+      durationSec: durationSec,
+      source: TrackSource.local,
+      uri: audioPath,
+      genre: 'My songs',
+    );
+    localTracks.insert(0, t);
+    _setLyrics(t, lyrics);
+    _writeTracks(_kLocal, localTracks);
+    notifyListeners();
+    return t;
+  }
+
+  /// Changes a song's details; the change shows everywhere it appears
+  /// (My songs, Liked Songs, playlists, history).
+  Track updateOwnSong(
+    Track old, {
+    required String title,
+    required String artist,
+    String? coverPath,
+    bool removeCover = false,
+    String? lyrics,
+  }) {
+    final newCover = removeCover ? null : (coverPath ?? old.artworkUrl);
+    if (newCover != old.artworkUrl && old.artworkUrl != null && !old.artworkUrl!.startsWith('http')) {
+      _deleteImage(old.artworkUrl);
+    }
+    final t = Track(
+      id: old.id,
+      title: title.trim().isEmpty ? old.title : title.trim(),
+      artist: artist.trim().isEmpty ? old.artist : artist.trim(),
+      artworkUrl: newCover,
+      artworkLargeUrl: newCover,
+      durationSec: old.durationSec,
+      source: old.source,
+      uri: old.uri,
+      genre: old.genre,
+    );
+    void swap(List<Track> list) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] == t) list[i] = t;
+      }
+    }
+
+    swap(localTracks);
+    swap(liked);
+    swap(recent);
+    for (final p in playlists) {
+      swap(p.tracks);
+    }
+    final st = stats[t.key];
+    if (st != null) stats[t.key] = PlayStat(track: t, plays: st.plays, seconds: st.seconds, last: st.last);
+    if (lyrics != null) _setLyrics(t, lyrics);
+    _writeTracks(_kLocal, localTracks);
+    _writeTracks(_kLiked, liked);
+    _writeTracks(_kRecent, recent);
+    _writeList(_kStats, stats.values);
+    _savePlaylists();
+    notifyListeners();
+    return t;
+  }
+
+  String? lyricsFor(Track t) {
+    final l = ownLyrics[t.key];
+    return (l == null || l.trim().isEmpty) ? null : l;
+  }
+
+  void _setLyrics(Track t, String lyrics) {
+    if (lyrics.trim().isEmpty) {
+      ownLyrics.remove(t.key);
+    } else {
+      ownLyrics[t.key] = lyrics.trim();
+    }
+    _prefs?.setString(_kLyrics, jsonEncode(ownLyrics));
+  }
+
   Future<void> removeLocal(Track t) async {
     localTracks.remove(t);
     liked.remove(t);
+    if (t.artworkUrl != null && !t.artworkUrl!.startsWith('http')) _deleteImage(t.artworkUrl);
+    if (ownLyrics.remove(t.key) != null) _prefs?.setString(_kLyrics, jsonEncode(ownLyrics));
     for (final p in playlists) {
       p.tracks.remove(t);
     }
