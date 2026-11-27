@@ -8,6 +8,7 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import 'services/cloud_sync.dart';
 import 'services/library_store.dart';
 import 'services/player_controller.dart';
 import 'ui/shell.dart';
@@ -44,11 +45,15 @@ Future<void> main() async {
 
   final library = LibraryStore();
   await library.load();
+  // One account on every device (Supabase).
+  final cloud = CloudSync(library);
+  await cloud.init();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: library),
+        ChangeNotifierProvider.value(value: cloud),
         ChangeNotifierProvider(create: (_) => PlayerController(library)),
       ],
       child: const MutinyApp(),

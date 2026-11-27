@@ -7,14 +7,22 @@ import 'package:material_ui/material_ui.dart';
 
 import 'theme.dart';
 
-/// A liquid-glass surface: live blur of what's behind, a soft white
-/// gradient fill, a hairline border and a specular highlight on top.
+/// Gentle colour boost on what shows through the glass.
+const _vibrancy = ui.ColorFilter.matrix(<double>[
+  1.315, -0.286, -0.029, 0, 0, //
+  -0.085, 1.114, -0.029, 0, 0,
+  -0.085, -0.286, 1.371, 0, 0,
+  0, 0, 0, 1, 0,
+]);
+
+/// iPhone-style liquid glass: clear and see-through. Only a light blur, an
+/// almost invisible fill, and bright refracting edges that catch the light.
 class Glass extends StatelessWidget {
   const Glass({
     super.key,
     required this.child,
     this.radius = 24,
-    this.blur = 26,
+    this.blur = 28,
     this.padding,
     this.tint,
     this.strength = 1,
@@ -23,11 +31,13 @@ class Glass extends StatelessWidget {
 
   final Widget child;
   final double radius;
+
+  /// Relative blur; the glass stays mostly clear (sigma ≈ blur × 0.2).
   final double blur;
   final EdgeInsetsGeometry? padding;
   final Color? tint;
 
-  /// 0..2, how milky the glass is.
+  /// 0..2, how visible the glass body is.
   final double strength;
   final BoxShape shape;
 
@@ -35,45 +45,101 @@ class Glass extends StatelessWidget {
   Widget build(BuildContext context) {
     final borderRadius = shape == BoxShape.circle ? null : BorderRadius.circular(radius);
     final s = strength.clamp(0.0, 2.0);
-    final decoration = BoxDecoration(
+    final sigma = (blur * 0.2).clamp(1.5, 10.0);
+    final fill = BoxDecoration(
       shape: shape,
       borderRadius: borderRadius,
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color.lerp(const Color(0x00FFFFFF), tint ?? const Color(0xFFFFFFFF), 0.16 * s)!,
-          Color.lerp(const Color(0x00FFFFFF), tint ?? const Color(0xFFB9A3FF), 0.05 * s)!,
+          Color.lerp(const Color(0x00FFFFFF), tint ?? const Color(0xFFFFFFFF), 0.07 * s)!,
+          const Color(0x00FFFFFF),
+          Color.lerp(const Color(0x00FFFFFF), tint ?? const Color(0xFFFFFFFF), 0.04 * s)!,
         ],
-      ),
-      border: Border.all(color: MColors.glassBorder, width: 0.8),
-    );
-    final highlight = BoxDecoration(
-      shape: shape,
-      borderRadius: borderRadius,
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment(0, -0.2),
-        colors: [Color(0x1FFFFFFF), Color(0x00FFFFFF)],
+        stops: const [0, 0.5, 1],
       ),
     );
     final body = DecoratedBox(
-      decoration: decoration,
-      position: DecorationPosition.background,
-      child: DecoratedBox(
-        decoration: highlight,
-        position: DecorationPosition.foreground,
+      decoration: fill,
+      child: CustomPaint(
+        foregroundPainter: _GlassEdgePainter(radius: radius, circle: shape == BoxShape.circle),
         child: padding == null ? child : Padding(padding: padding!, child: child),
       ),
     );
     final filter = BackdropFilter(
-      filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+      filter: ui.ImageFilter.compose(
+        outer: _vibrancy,
+        inner: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma, tileMode: TileMode.mirror),
+      ),
       child: body,
     );
     return shape == BoxShape.circle
         ? ClipOval(child: filter)
         : ClipRRect(borderRadius: borderRadius!, child: filter);
   }
+}
+
+/// The look of thick clear glass: light bending at the edges (a soft bright
+/// band inside the rim), a crisp specular line on the top-left and
+/// bottom-right, and a faint shadow line under the top edge for depth.
+class _GlassEdgePainter extends CustomPainter {
+  const _GlassEdgePainter({required this.radius, required this.circle});
+
+  final double radius;
+  final bool circle;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final r = circle ? size.shortestSide / 2 : radius;
+    final rr = RRect.fromRectAndRadius(rect, Radius.circular(r));
+    final edge = (size.shortestSide * 0.18).clamp(4.0, 14.0);
+
+    canvas.save();
+    canvas.clipRRect(rr);
+
+    // Refraction band: bright inside the rim, fading toward the middle.
+    canvas.drawRRect(
+      rr.deflate(edge / 2),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = edge
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, edge * 0.6)
+        ..shader = ui.Gradient.linear(
+          rect.topLeft,
+          rect.bottomRight,
+          [const Color(0x40FFFFFF), const Color(0x0AFFFFFF), const Color(0x08FFFFFF), const Color(0x30FFFFFF)],
+          [0, 0.4, 0.6, 1],
+        ),
+    );
+
+    // Small curved highlight near the top, like a reflection on a lens.
+    final hl = Rect.fromLTWH(size.width * 0.06, 1.5, size.width * 0.88, (size.height * 0.28).clamp(4.0, 26.0));
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(hl, Radius.circular(r)),
+      Paint()
+        ..shader = ui.Gradient.linear(hl.topCenter, hl.bottomCenter, [const Color(0x26FFFFFF), const Color(0x00FFFFFF)]),
+    );
+    canvas.restore();
+
+    // Crisp specular rim.
+    canvas.drawRRect(
+      rr.deflate(0.6),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..shader = ui.Gradient.linear(
+          rect.topLeft,
+          rect.bottomRight,
+          [const Color(0xE6FFFFFF), const Color(0x33FFFFFF), const Color(0x14FFFFFF), const Color(0x26FFFFFF), const Color(0xB3FFFFFF)],
+          [0, 0.22, 0.5, 0.78, 1],
+        ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GlassEdgePainter old) => old.radius != radius || old.circle != circle;
 }
 
 /// Scales down slightly while pressed, like iOS controls.
@@ -176,7 +242,7 @@ class PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = filled ? MColors.bg : MColors.text;
+    final fg = filled ? const Color(0xFF2A0F55) : MColors.text;
     final content = Padding(
       padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 20, vertical: compact ? 8 : 11),
       child: Row(
@@ -203,13 +269,11 @@ class PillButton extends StatelessWidget {
           ? DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(100),
-                gradient: const LinearGradient(colors: [MColors.lilac, MColors.lavender]),
+                gradient: MColors.brand,
+                border: Border.all(color: const Color(0x99FFFFFF), width: 0.8),
                 boxShadow: [
-                  BoxShadow(
-                    color: MColors.violet.withValues(alpha: 0.45),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
+                  BoxShadow(color: MColors.fuchsia.withValues(alpha: 0.45), blurRadius: 26, offset: const Offset(0, 8)),
+                  BoxShadow(color: MColors.violet.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 3)),
                 ],
               ),
               child: content,
@@ -237,15 +301,17 @@ class GlassChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(100),
-          color: selected ? MColors.lavender : const Color(0x14FFFFFF),
-          border: Border.all(color: selected ? MColors.lavender : MColors.glassBorder, width: 0.8),
+          gradient: selected ? MColors.brand : null,
+          color: selected ? null : const Color(0x1AFFFFFF),
+          border: Border.all(color: selected ? const Color(0xB3FFFFFF) : MColors.glassBorder, width: 0.8),
+          boxShadow: selected ? [BoxShadow(color: MColors.fuchsia.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 4))] : null,
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? MColors.bg : MColors.text,
+            fontWeight: FontWeight.w700,
+            color: selected ? const Color(0xFF2A0F55) : MColors.text,
           ),
         ),
       ),
@@ -369,7 +435,7 @@ Future<T?> showGlassSheet<T>(BuildContext context, {required WidgetBuilder build
           strength: 1.3,
           tint: const Color(0xFF8B5CF6),
           child: DecoratedBox(
-            decoration: const BoxDecoration(color: Color(0x8C120A22)),
+            decoration: const BoxDecoration(color: Color(0x801A0D33)),
             child: SafeArea(
               top: false,
               child: Column(

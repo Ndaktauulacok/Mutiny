@@ -35,13 +35,17 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text.rich(
-              TextSpan(children: [
-                TextSpan(text: title),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              children: [
+                Text(title, style: MText.h2),
                 if (accentWord != null)
-                  TextSpan(text: ' $accentWord', style: const TextStyle(color: MColors.lavender)),
-              ]),
-              style: MText.h2,
+                  ShaderMask(
+                    blendMode: BlendMode.srcIn,
+                    shaderCallback: (r) => MColors.brandVivid.createShader(r),
+                    child: Text(' $accentWord', style: MText.h2),
+                  ),
+              ],
             ),
           ),
           if (action != null)

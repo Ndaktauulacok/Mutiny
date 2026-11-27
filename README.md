@@ -32,6 +32,17 @@ Music comes from free and legal sources:
 - Lock-screen and notification controls, plays in the background
 - Mini player: tap to open, swipe up to expand, swipe sideways to skip
 
+## Account & sync
+
+Sign in (Library → cloud icon, or Profile) with email and password and Mutiny keeps
+playlists, Liked Songs, followed artists, saved playlists, stations, profile and your
+own songs (audio, covers, lyrics) the same on every phone, tablet and computer.
+Changes show up on your other devices within seconds. Without an account everything
+still works, on this device only.
+
+The cloud is a Supabase project (`rtlycngyhzoqdvnqkbrl`, Singapore) with row-level
+security: each account can only read and write its own rows and files.
+
 ## Background playback
 
 Music keeps playing when you lock the phone or switch apps:

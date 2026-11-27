@@ -331,6 +331,130 @@ class LibraryStore extends ChangeNotifier {
     return now;
   }
 
+  // ----------------------------------------------------------- cloud sync
+  /// Everything that syncs between devices, as (kind/id → JSON).
+  /// File paths are this device's paths; CloudSync swaps them for cloud ones.
+  Map<String, Map<String, dynamic>> syncSnapshot() {
+    final out = <String, Map<String, dynamic>>{
+      'profile/me': {'name': profile.name, 'avatar': profile.avatarPath},
+      'liked/all': {'items': liked.map((t) => t.toJson()).toList()},
+      'artist/all': {'items': followedArtists.map((a) => a.toJson()).toList()},
+      'saved_playlist/all': {'items': savedPlaylists.map((c) => c.toJson()).toList()},
+      'station/all': {'items': stations.map((t) => t.toJson()).toList()},
+      'recent/all': {'items': recent.take(30).map((t) => t.toJson()).toList()},
+    };
+    for (final p in playlists) {
+      out['playlist/${p.id}'] = p.toJson();
+    }
+    for (final t in localTracks) {
+      out['song/${t.id}'] = {'track': t.toJson(), 'lyrics': ownLyrics[t.key]};
+    }
+    return out;
+  }
+
+  /// Applies an item that changed on another device ([data] null = deleted).
+  void applySynced(String key, Map<String, dynamic>? data, {bool notify = true}) {
+    final slash = key.indexOf('/');
+    final kind = key.substring(0, slash);
+    final id = key.substring(slash + 1);
+    List<T> items<T>(T Function(Map<String, dynamic>) parse) => ((data?['items'] as List?) ?? const [])
+        .map((e) => parse(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    switch (kind) {
+      case 'profile':
+        if (data != null) {
+          profile.name = data['name'] as String? ?? profile.name;
+          profile.avatarPath = data['avatar'] as String?;
+          _prefs?.setString(_kProfile, jsonEncode(profile.toJson()));
+        }
+      case 'liked':
+        liked
+          ..clear()
+          ..addAll(items(Track.fromJson));
+        _writeTracks(_kLiked, liked);
+      case 'artist':
+        followedArtists
+          ..clear()
+          ..addAll(items(Artist.fromJson));
+        _writeList(_kArtists, followedArtists);
+      case 'saved_playlist':
+        savedPlaylists
+          ..clear()
+          ..addAll(items(Collection.fromJson));
+        _writeList(_kSavedPlaylists, savedPlaylists);
+      case 'station':
+        stations
+          ..clear()
+          ..addAll(items(Track.fromJson));
+        _writeTracks(_kStations, stations);
+      case 'recent':
+        recent
+          ..clear()
+          ..addAll(items(Track.fromJson));
+        _writeTracks(_kRecent, recent);
+      case 'playlist':
+        final i = playlists.indexWhere((p) => p.id == id);
+        if (data == null) {
+          if (i >= 0) playlists.removeAt(i);
+        } else {
+          final p = UserPlaylist.fromJson(data);
+          if (i >= 0) {
+            playlists[i] = p;
+          } else {
+            playlists.insert(0, p);
+          }
+        }
+        _savePlaylists();
+      case 'song':
+        final i = localTracks.indexWhere((t) => t.id == id);
+        if (data == null) {
+          if (i >= 0) {
+            final t = localTracks.removeAt(i);
+            ownLyrics.remove(t.key);
+          }
+        } else {
+          final t = Track.fromJson(Map<String, dynamic>.from(data['track'] as Map));
+          if (i >= 0) {
+            localTracks[i] = t;
+          } else {
+            localTracks.insert(0, t);
+          }
+          final lyr = data['lyrics'] as String?;
+          if (lyr == null || lyr.isEmpty) {
+            ownLyrics.remove(t.key);
+          } else {
+            ownLyrics[t.key] = lyr;
+          }
+        }
+        _writeTracks(_kLocal, localTracks);
+        _prefs?.setString(_kLyrics, jsonEncode(ownLyrics));
+    }
+    if (notify) notifyListeners();
+  }
+
+  /// Forgets everything (used when a different account signs in here).
+  Future<void> clearAll() async {
+    liked.clear();
+    playlists.clear();
+    stations.clear();
+    localTracks.clear();
+    recent.clear();
+    recentSearches.clear();
+    followedArtists.clear();
+    savedPlaylists.clear();
+    stats.clear();
+    ownLyrics.clear();
+    profile = Profile(name: 'Listener');
+    for (final k in [_kLiked, _kPlaylists, _kStations, _kLocal, _kRecent, _kSearches, _kProfile, _kArtists, _kSavedPlaylists, _kStats, _kLyrics]) {
+      await _prefs?.remove(k);
+    }
+    notifyListeners();
+  }
+
+  /// Tells listeners something changed without changing data (e.g. a file
+  /// finished downloading, so covers can now be shown).
+  void refresh() => notifyListeners();
+
   // ---------------------------------------------------------------- stats
   /// Called by the player when a song stops being the current one.
   /// Counts as a play after 30 seconds, like Spotify.

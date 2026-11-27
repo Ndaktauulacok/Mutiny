@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../services/cloud_sync.dart';
 import '../services/library_store.dart';
 import '../services/player_controller.dart';
 import 'effects.dart';
@@ -26,6 +27,7 @@ class _ShellState extends State<Shell> {
   final _pages = const [HomeScreen(), SearchScreen(), RadioScreen(), LibraryScreen()];
   Color? _accent;
   String? _accentFor;
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void initState() {
@@ -36,6 +38,8 @@ class _ShellState extends State<Shell> {
       if (mounted) toast(context, m);
     };
     player.addListener(_updateAccent);
+    // Catch up on changes made on other devices while the app was closed.
+    _lifecycle = AppLifecycleListener(onResume: () => context.read<CloudSync>().onResume());
     // Look for a newer Mutiny on GitHub a few seconds after start-up.
     Future.delayed(const Duration(seconds: 4), () {
       if (mounted) autoCheckForUpdate(context);
@@ -44,6 +48,7 @@ class _ShellState extends State<Shell> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     context.read<PlayerController>().removeListener(_updateAccent);
     super.dispose();
   }
@@ -150,9 +155,8 @@ class _TabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Glass(
       radius: 100,
-      blur: 30,
-      strength: 1.3,
-      tint: const Color(0xFFB39DFF),
+      blur: 32,
+      strength: 1.1,
       child: SizedBox(
         height: 62,
         child: LayoutBuilder(builder: (context, c) {
@@ -170,12 +174,13 @@ class _TabBar extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(100),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0x40E9DDFF), Color(0x1AC4B5FD)],
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [MColors.fuchsia.withValues(alpha: 0.38), MColors.violet.withValues(alpha: 0.30)],
                     ),
-                    border: Border.all(color: const Color(0x33FFFFFF), width: 0.8),
+                    border: Border.all(color: const Color(0x80FFFFFF), width: 0.9),
+                    boxShadow: [BoxShadow(color: MColors.fuchsia.withValues(alpha: 0.35), blurRadius: 16)],
                   ),
                 ),
               ),
@@ -196,7 +201,7 @@ class _TabBar extends StatelessWidget {
                               Icon(
                                 i == index ? _items[i].$1 : _items[i].$2,
                                 size: 23,
-                                color: i == index ? MColors.lilac : MColors.textSecondary,
+                                color: i == index ? Colors.white : MColors.textSecondary,
                               ),
                               const SizedBox(height: 2),
                               Text(
@@ -252,10 +257,9 @@ class MiniPlayer extends StatelessWidget {
                 if (v > 300) player.previous();
               },
               child: Glass(
-                radius: 20,
-                blur: 30,
-                strength: 1.4,
-                tint: const Color(0xFFA78BFA),
+                radius: 22,
+                blur: 32,
+                strength: 1.2,
                 child: SizedBox(
                   height: 62,
                   child: Stack(

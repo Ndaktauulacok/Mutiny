@@ -3,21 +3,39 @@ import 'package:material_ui/material_ui.dart';
 
 /// Mutiny's palette: deep night purple with lavender light.
 abstract final class MColors {
-  static const bg = Color(0xFF0A0612);
-  static const bgRaised = Color(0xFF140B24);
-  static const deep = Color(0xFF2A1250);
-  static const violet = Color(0xFF7C3AED);
-  static const purple = Color(0xFFA78BFA);
-  static const lavender = Color(0xFFC4B5FD);
-  static const lilac = Color(0xFFE9DDFF);
+  static const bg = Color(0xFF110824);
+  static const bgRaised = Color(0xFF1D1036);
+  static const deep = Color(0xFF3B1A78);
+  static const violet = Color(0xFF8B5CF6);
+  static const purple = Color(0xFFB794FF);
+  static const lavender = Color(0xFFD2C2FF);
+  static const lilac = Color(0xFFF4ECFF);
 
-  static const text = Color(0xFFF5F0FF);
-  static const textSecondary = Color(0xB3E4D9FF); // ~70%
-  static const textTertiary = Color(0x73D8CCF5); // ~45%
+  /// Bright accents that make the purple pop.
+  static const fuchsia = Color(0xFFF07CFF);
+  static const pink = Color(0xFFFF7EB6);
+  static const sky = Color(0xFF7DD8FF);
+
+  static const text = Color(0xFFFFFBFF);
+  static const textSecondary = Color(0xD1F0E8FF); // ~82%
+  static const textTertiary = Color(0x99E6DCFF); // ~60%
 
   static const glassFill = Color(0x14FFFFFF);
-  static const glassBorder = Color(0x26FFFFFF);
-  static const hairline = Color(0x14FFFFFF);
+  static const glassBorder = Color(0x40FFFFFF);
+  static const hairline = Color(0x1FFFFFFF);
+
+  /// Signature gradient for primary buttons and highlights.
+  static const brand = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFFBE7FF), Color(0xFFE3B8FF), Color(0xFFB794FF)],
+  );
+
+  static const brandVivid = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [Color(0xFFB794FF), Color(0xFFF07CFF), Color(0xFFFF9CC8)],
+  );
 }
 
 abstract final class MText {

@@ -6,6 +6,7 @@ import '../../services/player_controller.dart';
 import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'account_sheet.dart';
 import 'add_song_screen.dart';
 import 'collection_screen.dart';
 import 'profile_screen.dart';
@@ -235,11 +236,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
                 const SizedBox(width: 12),
                 const Expanded(child: Text('Your Library', style: MText.h1)),
+                const SyncBadge(),
+                const SizedBox(width: 8),
                 GlassIconButton(icon: Icons.add_rounded, onTap: _createMenu, tooltip: 'Create'),
               ],
             ),
           ),
         ),
+        const SliverToBoxAdapter(child: SignInCard()),
         SliverToBoxAdapter(
           child: SizedBox(
             height: 56,

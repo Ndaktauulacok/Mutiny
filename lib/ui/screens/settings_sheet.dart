@@ -5,6 +5,7 @@ import '../../services/library_store.dart';
 import '../../services/updater.dart';
 import '../glass.dart';
 import '../theme.dart';
+import 'account_sheet.dart';
 import 'update_sheet.dart';
 
 void showSettingsSheet(BuildContext context) {
@@ -38,6 +39,14 @@ void showSettingsSheet(BuildContext context) {
               text: 'Music you import stays on this device only.',
             ),
             const Divider(color: MColors.hairline, height: 28),
+            SheetAction(
+              icon: Icons.devices_rounded,
+              label: 'Account & sync',
+              onTap: () {
+                Navigator.pop(ctx);
+                showAccountSheet(context);
+              },
+            ),
             SheetAction(
               icon: Icons.system_update_rounded,
               label: 'Check for updates',

@@ -12,6 +12,7 @@ import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'collection_screen.dart';
+import 'account_sheet.dart';
 import 'settings_sheet.dart';
 
 /// Your profile: photo, name, listening stats, top artists and songs.
@@ -38,6 +39,8 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 GlassIconButton(icon: Icons.arrow_back_ios_new_rounded, iconSize: 17, onTap: () => Navigator.maybePop(context)),
                 const Spacer(),
+                const SyncBadge(),
+                const SizedBox(width: 8),
                 GlassIconButton(icon: Icons.settings_rounded, iconSize: 20, tooltip: 'Settings', onTap: () => showSettingsSheet(context)),
               ],
             ),
@@ -78,6 +81,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Center(child: PillButton(label: 'Edit profile', icon: Icons.edit_rounded, compact: true, onTap: () => showEditProfile(context))),
+          const SignInCard(),
           const SizedBox(height: 22),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
