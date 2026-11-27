@@ -222,7 +222,7 @@ class _OnAir extends StatelessWidget {
           height: 110,
           child: Stack(
             children: [
-              Positioned(right: -30, top: -10, bottom: -10, width: 200, child: WaveOrb(active: playing, spacing: 6)),
+              Positioned(right: -30, top: -10, bottom: -10, width: 200, child: LiquidOrb(active: playing)),
               Padding(
                 padding: const EdgeInsets.all(14),
                 child: Row(

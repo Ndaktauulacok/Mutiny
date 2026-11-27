@@ -15,15 +15,15 @@ import '../widgets.dart';
 import 'collection_screen.dart';
 import 'settings_sheet.dart';
 
-/// Moods the user can tune "My Wave" to.
-enum WaveMood {
+/// Moods the user can tune Flow (the endless mix) to.
+enum FlowMood {
   everything('Everything', ['Electronic', 'Hip-Hop/Rap', 'Pop', 'Lo-Fi', 'R&B/Soul', 'Alternative']),
   chill('Chill', ['Lo-Fi', 'Ambient', 'Acoustic', 'R&B/Soul']),
   energy('Energy', ['Electronic', 'House', 'Techno', 'Dubstep']),
   hiphop('Hip-Hop', ['Hip-Hop/Rap', 'Trap', 'R&B/Soul']),
   discover('Discover', []);
 
-  const WaveMood(this.label, this.genres);
+  const FlowMood(this.label, this.genres);
   final String label;
   final List<String> genres;
 }
@@ -43,8 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Collection>> _playlists;
   late Future<List<Track>> _underground;
   late Future<List<Track>> _stations;
-  WaveMood _mood = WaveMood.everything;
-  bool _waveLoading = false;
+  FlowMood _mood = FlowMood.everything;
+  bool _flowLoading = false;
 
   @override
   void initState() {
@@ -71,29 +71,29 @@ class _HomeScreenState extends State<HomeScreen> {
     return list.take(6).toList();
   }
 
-  Future<void> _playWave() async {
+  Future<void> _playFlow() async {
     final player = context.read<PlayerController>();
-    if (player.contextName == 'My Wave' && player.hasTrack) {
+    if (player.contextName == 'Flow' && player.hasTrack) {
       await player.togglePlay();
       return;
     }
-    setState(() => _waveLoading = true);
+    setState(() => _flowLoading = true);
     try {
-      final lists = _mood == WaveMood.discover
+      final lists = _mood == FlowMood.discover
           ? [await _audius.undergroundTrending(limit: 60)]
           : await Future.wait(_mood.genres.map((g) => _audius.trending(genre: g, limit: 20).catchError((_) => <Track>[])));
       final seen = <String>{};
       final merged = [for (final l in lists) ...l].where((t) => seen.add(t.id)).toList()..shuffle();
       if (merged.isEmpty) throw Exception();
-      await player.playTracks(merged, from: 'My Wave');
+      await player.playTracks(merged, from: 'Flow');
     } catch (_) {
-      if (mounted) toast(context, "Couldn't start My Wave. Check your connection");
+      if (mounted) toast(context, "Couldn't start Flow. Check your connection");
     } finally {
-      if (mounted) setState(() => _waveLoading = false);
+      if (mounted) setState(() => _flowLoading = false);
     }
   }
 
-  void _tuneWave() {
+  void _tuneFlow() {
     showGlassSheet(
       context,
       builder: (ctx) => StatefulBuilder(
@@ -102,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Tune My Wave', style: MText.h2),
+              const Text('Tune your Flow', style: MText.h2),
               const SizedBox(height: 6),
               const Text('Pick a mood for your endless mix', style: MText.body),
               const SizedBox(height: 20),
@@ -111,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 spacing: 8,
                 runSpacing: 10,
                 children: [
-                  for (final m in WaveMood.values)
+                  for (final m in FlowMood.values)
                     GlassChip(
                       label: m.label,
                       selected: m == _mood,
@@ -119,9 +119,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         setSheet(() {});
                         setState(() => _mood = m);
                         final player = context.read<PlayerController>();
-                        if (player.contextName == 'My Wave') player.contextName = null;
+                        if (player.contextName == 'Flow') player.contextName = null;
                         Navigator.pop(ctx);
-                        _playWave();
+                        _playFlow();
                       },
                     ),
                 ],
@@ -146,16 +146,16 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: EdgeInsets.only(top: top + 8, bottom: bottomInset(context)),
         children: [
           _TopBar(onSettings: () => showSettingsSheet(context)),
-          _WaveHero(mood: _mood, loading: _waveLoading, onPlay: _playWave, onTune: _tuneWave),
+          _FlowHero(mood: _mood, loading: _flowLoading, onPlay: _playFlow, onTune: _tuneFlow),
           const _JumpBackIn(),
 
-          const SectionHeader('Your', accentWord: 'Mixes'),
+          const SectionHeader('Daily', accentWord: 'mixes'),
           HorizontalList(
             height: 205,
             itemCount: _dailyGenres.length,
             itemBuilder: (_, i) {
               final g = _dailyGenres[i];
-              final cover = HalftoneCover(index: i + DateTime.now().day, color: genreColor(g), label: 'MIX ${i + 1}');
+              final cover = LiquidCover(index: i + DateTime.now().day, color: genreColor(g), label: '0${i + 1}');
               return CoverCard(
                 title: 'Daily Mix ${i + 1}',
                 subtitle: g,
@@ -163,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => Navigator.of(context).push(FadeRoute(CollectionScreen.mix(
                   title: 'Daily Mix ${i + 1}',
                   subtitle: '$g · fresh today',
-                  cover: HalftoneCover(index: i + DateTime.now().day, color: genreColor(g), label: 'MIX ${i + 1}'),
+                  cover: LiquidCover(index: i + DateTime.now().day, color: genreColor(g), label: '0${i + 1}'),
                   load: () async => (await _audius.trending(genre: g, limit: 40))..shuffle(math.Random(DateTime.now().day)),
                 ))),
               );
@@ -274,7 +274,7 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// The app's logo: the halftone wave ring.
+/// The app's logo: a flag made of sound waves.
 class MutinyMark extends StatelessWidget {
   const MutinyMark({super.key, this.size = 28});
   final double size;
@@ -288,10 +288,10 @@ class MutinyMark extends StatelessWidget {
       );
 }
 
-class _WaveHero extends StatelessWidget {
-  const _WaveHero({required this.mood, required this.loading, required this.onPlay, required this.onTune});
+class _FlowHero extends StatelessWidget {
+  const _FlowHero({required this.mood, required this.loading, required this.onPlay, required this.onTune});
 
-  final WaveMood mood;
+  final FlowMood mood;
   final bool loading;
   final VoidCallback onPlay;
   final VoidCallback onTune;
@@ -299,52 +299,59 @@ class _WaveHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerController>();
-    final waveOn = player.contextName == 'My Wave' && player.hasTrack;
-    final playing = waveOn && player.playing;
-    return SizedBox(
-      height: 300,
-      child: Stack(
-        children: [
-          Positioned(
-            right: -40,
-            top: 10,
-            width: 330,
-            height: 250,
-            child: WaveOrb(active: player.playing, color: MColors.lavender),
-          ),
-          Positioned(
-            left: 20,
-            bottom: 26,
-            right: 20,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('My', style: MText.hero),
-                const Text('Wave', style: MText.hero),
-                const SizedBox(height: 8),
-                Text(
-                  waveOn ? 'Now: ${player.current?.title ?? ''}' : 'Endless music · ${mood.label}',
-                  style: MText.body,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 16),
-                Row(
+    final flowOn = player.contextName == 'Flow' && player.hasTrack;
+    final playing = flowOn && player.playing;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+      child: Glass(
+        radius: 32,
+        blur: 22,
+        child: SizedBox(
+          height: 360,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 4,
+                height: 220,
+                child: LiquidOrb(active: player.playing),
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 22,
+                child: Column(
                   children: [
-                    PillButton(
-                      label: loading ? 'Tuning…' : (playing ? 'Pause' : 'Play'),
-                      icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      filled: true,
-                      onTap: loading ? null : onPlay,
+                    const Text('Flow', style: TextStyle(fontFamily: MText.display, fontSize: 40, fontWeight: FontWeight.w300, letterSpacing: -1.5, color: MColors.lilac, height: 1)),
+                    const SizedBox(height: 6),
+                    Text(
+                      flowOn ? player.current?.title ?? '' : 'Endless free music · ${mood.label}',
+                      style: MText.body,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(width: 10),
-                    GlassIconButton(icon: Icons.tune_rounded, size: 44, onTap: onTune, tooltip: 'Tune My Wave'),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        PillButton(
+                          label: loading ? 'Tuning…' : (playing ? 'Pause' : (flowOn ? 'Resume' : 'Start Flow')),
+                          icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          filled: true,
+                          onTap: loading ? null : onPlay,
+                        ),
+                        const SizedBox(width: 10),
+                        PillButton(label: mood.label, icon: Icons.tune_rounded, onTap: onTune),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

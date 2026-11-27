@@ -192,8 +192,8 @@ class _Cover extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Positioned.fill(child: WaveOrb(active: playing, spacing: 8)),
-            Artwork(url: track.artworkUrl, size: size * 0.36, radius: 22, icon: Icons.radio_rounded, fit: BoxFit.contain),
+            Positioned.fill(child: LiquidOrb(active: playing)),
+            Artwork(url: track.artworkUrl, size: size * 0.24, radius: 18, icon: Icons.radio_rounded, fit: BoxFit.contain),
           ],
         ),
       );

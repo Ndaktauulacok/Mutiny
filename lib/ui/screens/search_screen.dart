@@ -417,7 +417,7 @@ class _GenreTile extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Opacity(opacity: 0.9, child: HalftoneCover(index: index * 3 + 1, color: color, label: '')),
+          LiquidCover(index: index * 3 + 1, color: color, showMark: false),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(

@@ -66,6 +66,7 @@ dev_dependencies:
 flutter:
   assets:
     - assets/brand/mark.png
+    - assets/brand/mark_white.png
   fonts:
     - family: Unbounded
       fonts:

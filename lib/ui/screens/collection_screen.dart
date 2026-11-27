@@ -45,7 +45,7 @@ class CollectionScreen extends StatefulWidget {
         kind: CollectionKind.genre,
         title: genre,
         subtitle: 'Trending this week',
-        cover: HalftoneCover(index: index ?? genre.hashCode.abs() % 50, color: genreColor(genre), label: genre.toUpperCase()),
+        cover: LiquidCover(index: index ?? genre.hashCode.abs() % 50, color: genreColor(genre), label: genre),
         load: () => AudiusApi().trending(genre: genre, limit: 50),
       );
 

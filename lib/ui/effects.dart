@@ -143,49 +143,47 @@ class _AuroraPainter extends CustomPainter {
   bool shouldRepaint(_AuroraPainter old) => old.accent != accent;
 }
 
-// -------------------------------------------------------------- wave orb
+// ------------------------------------------------------------ liquid orb
 
-/// The "My Wave" dot-matrix orb: a halftone ring that ripples and breathes.
-/// When [active] (music playing) it moves faster and pulses harder.
-class WaveOrb extends StatefulWidget {
-  const WaveOrb({super.key, this.active = false, this.color = MColors.lavender, this.spacing = 7});
+/// Mutiny's signature animation: a glossy drop of liquid purple glass that
+/// morphs, wobbles and sheds little droplets. When [active] (music playing)
+/// it moves faster and ripples harder.
+class LiquidOrb extends StatefulWidget {
+  const LiquidOrb({super.key, this.active = false, this.color = MColors.purple});
 
   final bool active;
   final Color color;
-  final double spacing;
 
   @override
-  State<WaveOrb> createState() => _WaveOrbState();
+  State<LiquidOrb> createState() => _LiquidOrbState();
 }
 
-class _WaveOrbState extends State<WaveOrb> with SingleTickerProviderStateMixin, _TimeTicker {
-  final ValueNotifier<double> energy = ValueNotifier(0.3);
-  Timer? _energyTimer;
+class _LiquidOrbState extends State<LiquidOrb> with SingleTickerProviderStateMixin, _TimeTicker {
+  final ValueNotifier<double> energy = ValueNotifier(0.2);
 
   @override
   void initState() {
     super.initState();
-    targetSpeed = widget.active ? 1.6 : 0.6;
+    targetSpeed = widget.active ? 1.5 : 0.5;
     speed = targetSpeed;
-    energy.value = widget.active ? 1 : 0.3;
+    energy.value = widget.active ? 1 : 0.2;
     startTicker();
     time.addListener(_ease);
   }
 
   void _ease() {
-    final goal = widget.active ? 1.0 : 0.3;
-    energy.value += (goal - energy.value) * 0.04;
+    final goal = widget.active ? 1.0 : 0.2;
+    energy.value += (goal - energy.value) * 0.03;
   }
 
   @override
-  void didUpdateWidget(WaveOrb old) {
+  void didUpdateWidget(LiquidOrb old) {
     super.didUpdateWidget(old);
-    targetSpeed = widget.active ? 1.6 : 0.6;
+    targetSpeed = widget.active ? 1.5 : 0.5;
   }
 
   @override
   void dispose() {
-    _energyTimer?.cancel();
     time.removeListener(_ease);
     energy.dispose();
     super.dispose();
@@ -193,172 +191,229 @@ class _WaveOrbState extends State<WaveOrb> with SingleTickerProviderStateMixin, 
 
   @override
   Widget build(BuildContext context) => RepaintBoundary(
-        child: CustomPaint(
-          painter: _WaveOrbPainter(time, energy, widget.color, widget.spacing),
-          size: Size.infinite,
-        ),
+        child: CustomPaint(painter: _LiquidOrbPainter(time, energy, widget.color), size: Size.infinite),
       );
 }
 
-class _WaveOrbPainter extends CustomPainter {
-  _WaveOrbPainter(this.time, this.energy, this.color, this.spacing) : super(repaint: time);
+class _LiquidOrbPainter extends CustomPainter {
+  _LiquidOrbPainter(this.time, this.energy, this.color) : super(repaint: time);
 
   final ValueNotifier<double> time;
   final ValueNotifier<double> energy;
   final Color color;
-  final double spacing;
 
-  static const _levels = 7;
+  Path _blob(Offset c, double r, double t, double seed, double amp) {
+    const n = 90;
+    final path = Path();
+    for (var i = 0; i <= n; i++) {
+      final a = i / n * math.pi * 2;
+      final k = 1 +
+          amp *
+              (0.085 * math.sin(2 * a + t * 1.1 + seed) +
+                  0.06 * math.sin(3 * a - t * 0.8 + seed * 1.7) +
+                  0.035 * math.sin(5 * a + t * 1.6 + seed * 0.6) +
+                  0.02 * math.sin(7 * a - t * 2.2));
+      final p = c + Offset(math.cos(a), math.sin(a)) * (r * k);
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    return path..close();
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final t = time.value;
     final e = energy.value;
-    final cx = size.width / 2, cy = size.height / 2;
-    final rx = size.width * 0.46, ry = size.height * 0.44;
-    final buckets = List.generate(_levels, (_) => <Offset>[]);
+    final r = math.min(size.width, size.height) * 0.32 * (1 + 0.04 * e * math.sin(t * 3.1));
+    final c = size.center(Offset(0, math.sin(t * 0.7) * r * 0.04));
+    final amp = 0.7 + 1.1 * e;
+    final deep = Color.lerp(MColors.deep, color, 0.25)!;
+    final mid = Color.lerp(MColors.violet, color, 0.5)!;
 
-    final ringCenter = 0.58 + 0.07 * math.sin(t * 0.8) * (0.5 + e);
-    for (var y = spacing / 2; y < size.height; y += spacing) {
-      for (var x = spacing / 2; x < size.width; x += spacing) {
-        final nx = (x - cx) / rx, ny = (y - cy) / ry;
-        final d = math.sqrt(nx * nx + ny * ny);
-        if (d > 1.15) continue;
-        final a = math.atan2(ny, nx);
-        final wobble = 0.09 * math.sin(3 * a + t * 1.1) +
-            0.06 * math.sin(5 * a - t * 0.8) +
-            0.05 * e * math.sin(7 * a + t * 2.3);
-        final dd = d + wobble;
-        final ring = math.exp(-math.pow((dd - ringCenter) / (0.2 + 0.05 * e), 2));
-        final ripple = 0.5 + 0.5 * math.sin(dd * 11 - t * (2.0 + 2.5 * e));
-        final core = 0.35 * math.exp(-math.pow(dd / 0.22, 2)) * (0.5 + 0.5 * math.sin(t * 1.7));
-        final fade = (1 - ((d - 0.85) / 0.3).clamp(0.0, 1.0));
-        final v = ((ring * (0.6 + 0.4 * ripple) + core * e) * fade).clamp(0.0, 1.0);
-        final level = (v * _levels).floor();
-        if (level <= 0) continue;
-        buckets[math.min(level, _levels) - 1].add(Offset(x, y));
-      }
+    // Soft glow under the drop.
+    canvas.drawPath(
+      _blob(c, r * 1.08, t * 0.8, 2.1, amp),
+      Paint()
+        ..color = mid.withValues(alpha: 0.35 + 0.25 * e)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.38),
+    );
+
+    // Droplets that orbit, stretch away and fall back in.
+    final dropPaint = Paint()
+      ..shader = ui.Gradient.radial(c - Offset(r * 0.4, r * 0.5), r * 2.2, [MColors.lilac, mid, deep], [0, 0.45, 1]);
+    for (var i = 0; i < 3; i++) {
+      final ang = t * (0.35 + i * 0.13) + i * 2.1;
+      final pull = 0.98 + (0.18 + 0.12 * e) * (0.5 + 0.5 * math.sin(t * (0.9 + i * 0.3) + i));
+      final pos = c + Offset(math.cos(ang), math.sin(ang)) * r * pull;
+      final dr = r * (0.13 + 0.05 * math.sin(t * 1.3 + i * 1.7)) * (0.8 + 0.4 * e);
+      canvas.drawCircle(pos, dr, dropPaint);
     }
-    for (var i = 0; i < _levels; i++) {
-      if (buckets[i].isEmpty) continue;
-      final f = (i + 1) / _levels;
-      final paint = Paint()
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = spacing * (0.22 + 0.68 * f)
-        ..color = Color.lerp(MColors.deep, color, 0.35 + 0.65 * f)!.withValues(alpha: 0.35 + 0.65 * f);
-      canvas.drawPoints(ui.PointMode.points, buckets[i], paint);
-    }
+
+    // The body: deep glass with a light core.
+    final body = _blob(c, r, t, 0, amp);
+    canvas.drawPath(
+      body,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          c - Offset(r * 0.38, r * 0.45),
+          r * 1.75,
+          [MColors.lilac, Color.lerp(MColors.lavender, color, 0.3)!, mid, deep],
+          [0, 0.22, 0.55, 1],
+        ),
+    );
+
+    // Inner current swirling inside the drop.
+    canvas.save();
+    canvas.clipPath(body);
+    final swirl = c + Offset(math.cos(t * 0.6), math.sin(t * 0.8)) * r * 0.28;
+    canvas.drawPath(
+      _blob(swirl, r * 0.55, -t * 1.3, 4.0, amp * 1.4),
+      Paint()
+        ..color = const Color(0xFFF0ABFC).withValues(alpha: 0.18 + 0.12 * e)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.16),
+    );
+    canvas.drawPath(
+      _blob(c + Offset(r * 0.3, r * 0.45), r * 0.7, t * 0.9, 1.3, amp),
+      Paint()
+        ..color = deep.withValues(alpha: 0.55)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.22),
+    );
+    canvas.restore();
+
+    // Glass rim and specular highlight.
+    canvas.drawPath(
+      body,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..shader = ui.Gradient.linear(c - Offset(r, r), c + Offset(r, r), [const Color(0x80FFFFFF), const Color(0x10FFFFFF)]),
+    );
+    canvas.save();
+    canvas.translate(c.dx - r * 0.36, c.dy - r * 0.46);
+    canvas.rotate(-0.55);
+    final hl = Rect.fromCenter(center: Offset.zero, width: r * 0.62, height: r * 0.26);
+    canvas.drawOval(
+      hl,
+      Paint()
+        ..shader = ui.Gradient.linear(hl.topCenter, hl.bottomCenter, [const Color(0xB3FFFFFF), const Color(0x00FFFFFF)]),
+    );
+    canvas.restore();
+    canvas.drawCircle(
+      c + Offset(r * 0.42, r * 0.38),
+      r * 0.06,
+      Paint()..color = const Color(0x40FFFFFF),
+    );
   }
 
   @override
-  bool shouldRepaint(_WaveOrbPainter old) => old.color != color || old.spacing != spacing;
+  bool shouldRepaint(_LiquidOrbPainter old) => old.color != color;
 }
 
-// -------------------------------------------------------- halftone cover
+// ---------------------------------------------------------- liquid cover
 
-/// Generated cover for daily mixes: a halftone dot pattern with a big
-/// "MIX n" label, like the reference design.
-class HalftoneCover extends StatelessWidget {
-  const HalftoneCover({super.key, required this.index, required this.color, this.label});
+/// Generated cover for mixes and genres: soft liquid colour blobs under a
+/// glass sheen, with a big thin number (or label) and the flag mark.
+class LiquidCover extends StatelessWidget {
+  const LiquidCover({super.key, required this.index, required this.color, this.label = '', this.showMark = true});
 
   final int index;
   final Color color;
-  final String? label;
+  final String label;
+  final bool showMark;
 
   @override
   Widget build(BuildContext context) {
+    final short = label.length <= 3;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CustomPaint(painter: _HalftonePainter(index, color)),
-          const Positioned(
-            left: 10,
-            top: 10,
-            child: _MiniMark(),
-          ),
-          Positioned(
-            left: 10,
-            right: 8,
-            bottom: 6,
-            child: FittedBox(
-              alignment: Alignment.bottomLeft,
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label ?? 'MIX ${index + 1}',
-                style: const TextStyle(
-                  fontFamily: MText.display,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 30,
-                  letterSpacing: -0.5,
-                  color: Colors.white,
-                  shadows: [Shadow(color: Color(0x66000000), blurRadius: 12)],
+          CustomPaint(painter: _LiquidCoverPainter(index, color)),
+          if (showMark)
+            Positioned(
+              left: 10,
+              top: 10,
+              child: Image.asset('assets/brand/mark_white.png', width: 18, height: 18),
+            ),
+          if (label.isNotEmpty)
+            Positioned(
+              left: 12,
+              right: 10,
+              bottom: short ? 2 : 10,
+              child: FittedBox(
+                alignment: Alignment.bottomLeft,
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: MText.display,
+                    fontWeight: short ? FontWeight.w300 : FontWeight.w700,
+                    fontSize: short ? 64 : 22,
+                    height: 1,
+                    letterSpacing: short ? -3 : -0.4,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _MiniMark extends StatelessWidget {
-  const _MiniMark();
-
-  @override
-  Widget build(BuildContext context) => const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 18);
-}
-
-class _HalftonePainter extends CustomPainter {
-  _HalftonePainter(this.seed, this.color);
+class _LiquidCoverPainter extends CustomPainter {
+  _LiquidCoverPainter(this.seed, this.color);
 
   final int seed;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final dark = Color.lerp(color, Colors.black, 0.72)!;
+    final w = size.width, h = size.height;
+    final rect = Offset.zero & size;
     canvas.drawRect(
-      Offset.zero & size,
+      rect,
       Paint()
-        ..shader = ui.Gradient.linear(
-          Offset.zero,
-          Offset(size.width, size.height),
-          [Color.lerp(color, Colors.black, 0.45)!, dark],
-        ),
+        ..shader = ui.Gradient.linear(Offset.zero, Offset(w, h), [Color.lerp(color, Colors.black, 0.35)!, Color.lerp(color, Colors.black, 0.8)!]),
     );
-    final rnd = math.Random(seed * 7919 + 13);
-    final fx = 1.5 + rnd.nextDouble() * 3, fy = 1.5 + rnd.nextDouble() * 3;
-    final px = rnd.nextDouble() * math.pi * 2, py = rnd.nextDouble() * math.pi * 2;
-    final cx = size.width * (0.3 + rnd.nextDouble() * 0.5);
-    final cy = size.height * (0.2 + rnd.nextDouble() * 0.4);
-    final step = size.width / 22;
-    final paint = Paint()..strokeCap = StrokeCap.round;
-    final buckets = <int, List<Offset>>{};
-    for (var y = step / 2; y < size.height; y += step) {
-      for (var x = step / 2; x < size.width; x += step) {
-        final u = x / size.width, v = y / size.height;
-        final dist = (Offset(x, y) - Offset(cx, cy)).distance / size.width;
-        var s = 0.5 + 0.25 * math.sin(u * fx * math.pi + px) + 0.25 * math.cos(v * fy * math.pi + py);
-        s = s * 0.6 + 0.4 * math.max(0, 1 - dist * 1.6);
-        final level = (s.clamp(0, 1) * 6).round();
-        if (level <= 0) continue;
-        buckets.putIfAbsent(level, () => []).add(Offset(x, y));
-      }
+    final rnd = math.Random(seed * 9973 + 7);
+    final hsv = HSVColor.fromColor(color);
+    final palette = [
+      hsv.withHue((hsv.hue + 25) % 360).withSaturation(0.7).withValue(1).toColor(),
+      MColors.lilac,
+      hsv.withHue((hsv.hue - 35 + 360) % 360).withValue(0.85).toColor(),
+    ];
+    for (var i = 0; i < 3; i++) {
+      final center = Offset(w * (0.15 + rnd.nextDouble() * 0.75), h * (0.1 + rnd.nextDouble() * 0.7));
+      final radius = w * (0.22 + rnd.nextDouble() * 0.2);
+      canvas.drawOval(
+        Rect.fromCenter(center: center, width: radius * 2, height: radius * (1.4 + rnd.nextDouble() * 0.8)),
+        Paint()
+          ..color = palette[i].withValues(alpha: i == 1 ? 0.45 : 0.75)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, w * 0.12),
+      );
     }
-    buckets.forEach((level, pts) {
-      final f = level / 6;
-      paint
-        ..strokeWidth = step * (0.25 + 0.6 * f)
-        ..color = Color.lerp(color, Colors.white, 0.15 + 0.35 * f)!.withValues(alpha: 0.35 + 0.6 * f);
-      canvas.drawPoints(ui.PointMode.points, pts, paint);
-    });
+    // Curved glass sheen across the top.
+    final sheen = Path()
+      ..moveTo(0, 0)
+      ..lineTo(w, 0)
+      ..lineTo(w, h * 0.28)
+      ..quadraticBezierTo(w * 0.55, h * 0.48, 0, h * 0.36)
+      ..close();
+    canvas.drawPath(
+      sheen,
+      Paint()..shader = ui.Gradient.linear(Offset.zero, Offset(0, h * 0.45), [const Color(0x2EFFFFFF), const Color(0x05FFFFFF)]),
+    );
+    // Darken the bottom so the label reads.
+    canvas.drawRect(
+      rect,
+      Paint()..shader = ui.Gradient.linear(Offset(0, h * 0.45), Offset(0, h), [const Color(0x00000000), const Color(0x66000000)]),
+    );
   }
 
   @override
-  bool shouldRepaint(_HalftonePainter old) => old.seed != seed || old.color != color;
+  bool shouldRepaint(_LiquidCoverPainter old) => old.seed != seed || old.color != color;
 }
 
 // ------------------------------------------------------------ equalizer

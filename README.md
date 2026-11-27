@@ -11,8 +11,8 @@ Music comes from free and legal sources:
 
 ## Features
 
-- **My Wave**: an endless mix with an animated dot-matrix orb. Tune it to a mood (Chill, Energy, Hip-Hop, Discover)
-- **Daily Mixes**: 6 genre mixes with halftone covers that change every day
+- **Flow**: an endless mix with a morphing liquid-glass orb that moves faster when music plays. Tune it to a mood (Chill, Energy, Hip-Hop, Discover)
+- **Daily mixes**: 6 genre mixes with liquid-gradient covers that change every day
 - Trending songs, hot playlists, underground gems, radio in Malaysia
 - Search songs, artists, playlists and radio, with recent searches and genre browsing
 - Liked Songs, your own playlists (create, rename, delete, add/remove songs), saved stations
@@ -36,9 +36,11 @@ Music keeps playing when you lock the phone or switch apps:
 ## Branding
 
 Everything is in `branding/`: SVG (vector) and PNG versions of the symbol, the
-horizontal and stacked logos, app icons (normal, rounded, Android foreground, monochrome),
-the splash image and `mutiny-brand-sheet.png`. The symbol is the same halftone wave ring
-as the My Wave animation.
+horizontal and stacked logos (dark, transparent, on-light), app icons (normal, rounded,
+Android foreground, monochrome), the splash image and `mutiny-brand-sheet.png`.
+
+The symbol is a **flag made of sound waves**: raise your own flag against paid music.
+Its stripes wave like cloth and step down like an equalizer.
 
 ## Project layout
 
@@ -54,7 +56,7 @@ lib/
 └── ui/
     ├── theme.dart             purple palette + Unbounded font
     ├── glass.dart             liquid-glass panels, buttons, sheets
-    ├── effects.dart           aurora background, wave orb, halftone covers
+    ├── effects.dart           aurora background, liquid orb, liquid covers
     ├── widgets.dart           song rows, cards, song menu
     ├── shell.dart             tab bar + mini player
     └── screens/               home, search, radio, library, player…
