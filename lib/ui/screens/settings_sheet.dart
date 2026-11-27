@@ -2,10 +2,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/library_store.dart';
+import '../../services/updater.dart';
 import '../glass.dart';
 import '../theme.dart';
-
-const appVersion = '1.0.0';
+import 'update_sheet.dart';
 
 void showSettingsSheet(BuildContext context) {
   final lib = context.read<LibraryStore>();
@@ -39,6 +39,14 @@ void showSettingsSheet(BuildContext context) {
             ),
             const Divider(color: MColors.hairline, height: 28),
             SheetAction(
+              icon: Icons.system_update_rounded,
+              label: 'Check for updates',
+              onTap: () {
+                Navigator.pop(ctx);
+                manualCheckForUpdate(context);
+              },
+            ),
+            SheetAction(
               icon: Icons.history_toggle_off_rounded,
               label: 'Clear listening & search history',
               onTap: () {
@@ -48,7 +56,14 @@ void showSettingsSheet(BuildContext context) {
               },
             ),
             const SizedBox(height: 10),
-            const Text('Version $appVersion · Made in Sungai Petani', style: MText.caption, textAlign: TextAlign.center),
+            FutureBuilder<(String, int)>(
+              future: Updater.current(),
+              builder: (_, snap) => Text(
+                'Version ${snap.data?.$1 ?? '…'} · Made in Sungai Petani',
+                style: MText.caption,
+                textAlign: TextAlign.center,
+              ),
+            ),
           ],
         ),
       ),

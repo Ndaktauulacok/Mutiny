@@ -10,6 +10,7 @@ import 'screens/library_screen.dart';
 import 'screens/now_playing.dart';
 import 'screens/radio_screen.dart';
 import 'screens/search_screen.dart';
+import 'screens/update_sheet.dart';
 import 'theme.dart';
 
 class Shell extends StatefulWidget {
@@ -35,6 +36,10 @@ class _ShellState extends State<Shell> {
       if (mounted) toast(context, m);
     };
     player.addListener(_updateAccent);
+    // Look for a newer Mutiny on GitHub a few seconds after start-up.
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) autoCheckForUpdate(context);
+    });
   }
 
   @override

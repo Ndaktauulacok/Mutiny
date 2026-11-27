@@ -3,6 +3,7 @@ import 'package:mutiny/models/models.dart';
 import 'package:mutiny/services/audius_api.dart';
 import 'package:mutiny/services/library_store.dart';
 import 'package:mutiny/services/radio_api.dart';
+import 'package:mutiny/services/updater.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -84,5 +85,25 @@ void main() {
     expect(reloaded.playlists.single.tracks.single, song);
     expect(reloaded.recent.single, song);
     expect(reloaded.recentSearches, ['lofi']);
+  });
+
+  test('Release tags map to build numbers and platform files', () {
+    expect(Updater.buildFromTag('v1.0.42'), 42);
+    expect(Updater.buildFromTag('nightly'), isNull);
+    final info = Updater.parseRelease({
+      'tag_name': 'v1.0.7',
+      'body': 'Faster search',
+      'html_url': 'https://github.com/x/y/releases/tag/v1.0.7',
+      'assets': [
+        {'name': 'Mutiny-Android.apk', 'browser_download_url': 'https://d/a.apk'},
+        {'name': 'Mutiny-Windows.zip', 'browser_download_url': 'https://d/w.zip'},
+        {'name': 'Mutiny-iOS.ipa', 'browser_download_url': 'https://d/i.ipa'},
+      ],
+    })!;
+    expect(info.version, '1.0.7');
+    expect(info.build, 7);
+    expect(info.androidUrl, 'https://d/a.apk');
+    expect(info.windowsUrl, 'https://d/w.zip');
+    expect(info.iosUrl, 'https://d/i.ipa');
   });
 }

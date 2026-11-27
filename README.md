@@ -90,8 +90,8 @@ Apple only builds iPhone apps on a Mac, so GitHub builds it for you on one of it
    **Mutiny-iOS** (it unzips to `Mutiny-iOS.ipa`). The same run also gives you
    **Mutiny-Android** and **Mutiny-Windows**.
 
-Tip: push a tag (`git tag v1.0.0 && git push --tags`) to get all three files on a
-**Releases** page instead.
+Every push to `main` also publishes the three files as a **Release**
+(`v1.0.<build>`) on the repo's Releases page.
 
 ### 2. Install with Sideloadly (Windows)
 
@@ -111,6 +111,31 @@ Tip: push a tag (`git tag v1.0.0 && git push --tags`) to get all three files on 
 (about a minute). Your likes and playlists are kept.
 
 With a paid Apple Developer account ($99/year) the app lasts a year, or you can use TestFlight.
+
+## Updates
+
+Mutiny checks GitHub Releases a few seconds after it opens (and from
+**Settings → Check for updates**). When a newer build exists it shows **Update available**:
+
+- **Android**: *Update now* downloads the new APK and opens the installer (allow
+  "Install unknown apps" for Mutiny the first time). Your data stays.
+- **Windows**: *Update now* downloads the new version, closes Mutiny, replaces the files
+  and reopens it.
+- **iPhone**: Apple doesn't let apps install themselves outside the App Store, so it
+  tells you a new version exists. Install the new `.ipa` with Sideloadly; your data stays.
+
+### Android signing key (one-time setup)
+
+Android only accepts an update if it's signed with the same key. Add two repository secrets
+(**Settings → Secrets and variables → Actions → New repository secret**):
+
+| Name | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the whole content of `keystore-base64.txt` |
+| `ANDROID_KEYSTORE_PASSWORD` | the content of `password.txt` |
+
+Keep the key files private and backed up: if the key is lost, Android users must uninstall
+once to switch to a new key.
 
 ## Windows
 
