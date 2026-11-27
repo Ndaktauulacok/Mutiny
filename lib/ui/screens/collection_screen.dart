@@ -1,3 +1,8 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -23,6 +28,8 @@ class CollectionScreen extends StatefulWidget {
     this.cover,
     this.load,
     this.playlistId,
+    this.artist,
+    this.collection,
   });
 
   factory CollectionScreen.remote(Collection c) => CollectionScreen._(
@@ -31,6 +38,7 @@ class CollectionScreen extends StatefulWidget {
         subtitle: c.subtitle.isEmpty ? 'Playlist' : 'Playlist · ${c.subtitle}',
         artworkUrl: c.artworkUrl,
         load: () => AudiusApi().playlistTracks(c.id),
+        collection: c,
       );
 
   factory CollectionScreen.artist({required Artist artist}) => CollectionScreen._(
@@ -39,6 +47,7 @@ class CollectionScreen extends StatefulWidget {
         subtitle: artist.followers > 0 ? '${compactNumber(artist.followers)} followers' : 'Artist',
         artworkUrl: artist.avatarUrl,
         load: () => AudiusApi().artistTracks(artist.id),
+        artist: artist,
       );
 
   factory CollectionScreen.genre(String genre, {int? index}) => CollectionScreen._(
@@ -84,17 +93,31 @@ class CollectionScreen extends StatefulWidget {
   final Future<List<Track>> Function()? load;
   final String? playlistId;
 
+  /// Set on artist pages (Follow button).
+  final Artist? artist;
+
+  /// Set on Audius playlists (Save to Library button).
+  final Collection? collection;
+
   @override
   State<CollectionScreen> createState() => _CollectionScreenState();
 }
 
 class _CollectionScreenState extends State<CollectionScreen> {
   Future<List<Track>>? _future;
+  final _filterCtrl = TextEditingController();
+  String _filter = '';
 
   @override
   void initState() {
     super.initState();
     _future = widget.load?.call();
+  }
+
+  @override
+  void dispose() {
+    _filterCtrl.dispose();
+    super.dispose();
   }
 
   void _retry() => setState(() => _future = widget.load?.call());
@@ -126,26 +149,60 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 
+  String _subtitle(LibraryStore lib, List<Track>? tracks, UserPlaylist? playlist) {
+    final count = tracks?.length ?? 0;
+    final songs = '$count ${count == 1 ? 'song' : 'songs'}';
+    switch (widget.kind) {
+      case CollectionKind.userPlaylist:
+        final mins = playlist!.totalSeconds ~/ 60;
+        final len = mins >= 60 ? '${mins ~/ 60} hr ${mins % 60} min' : '$mins min';
+        return '${lib.profile.name} · $songs${mins > 0 ? ' · $len' : ''}';
+      case CollectionKind.liked:
+      case CollectionKind.local:
+      case CollectionKind.recent:
+        return songs;
+      default:
+        return widget.subtitle;
+    }
+  }
+
   Widget _buildPage(BuildContext context, List<Track>? tracks, UserPlaylist? playlist, {bool error = false}) {
+    final lib = context.read<LibraryStore>();
     final player = context.read<PlayerController>();
     final title = playlist?.name ?? widget.title;
-    final count = tracks?.length ?? 0;
-    final subtitle = switch (widget.kind) {
-      CollectionKind.liked || CollectionKind.local || CollectionKind.recent || CollectionKind.userPlaylist =>
-        '$count ${count == 1 ? 'song' : 'songs'}',
-      _ => widget.subtitle,
-    };
     final isArtist = widget.kind == CollectionKind.artist;
+    final q = _filter.toLowerCase();
+    final shown = tracks == null || q.isEmpty
+        ? tracks
+        : tracks.where((t) => t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q)).toList();
+    final canReorder = playlist != null && q.isEmpty;
+
     final cover = widget.cover ??
         (playlist != null
-            ? (playlist.coverUrl == null
-                ? const _GradientCover(icon: Icons.queue_music_rounded)
-                : Artwork(url: playlist.coverUrl, radius: 22))
+            ? PlaylistCover(playlist: playlist, radius: 22)
             : Artwork(url: widget.artworkUrl, radius: 22, circle: isArtist, icon: isArtist ? Icons.person_rounded : Icons.album_rounded));
+
+    Widget tile(int i) => TrackTile(
+          key: ValueKey('${shown![i].key}#$i'),
+          track: shown[i],
+          index: i,
+          playlist: playlist,
+          onTap: () => player.playTracks(shown, index: i, from: title),
+          trailing: canReorder
+              ? ReorderableDragStartListener(
+                  index: i,
+                  child: const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(Icons.drag_handle_rounded, color: MColors.textTertiary),
+                  ),
+                )
+              : null,
+        );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
           SliverToBoxAdapter(
             child: SafeArea(
@@ -164,7 +221,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                       GlassIconButton(
                         icon: Icons.delete_sweep_rounded,
                         tooltip: 'Clear history',
-                        onTap: () => context.read<LibraryStore>().clearHistory(),
+                        onTap: () => lib.clearHistory(),
                       ),
                   ],
                 ),
@@ -175,8 +232,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 10),
-                Hero(
-                  tag: 'cover:${widget.kind}:${widget.playlistId ?? title}',
+                Pressable(
+                  onTap: playlist == null ? null : () => showPlaylistEditor(context, playlist),
                   child: Container(
                     width: 220,
                     height: 220,
@@ -193,32 +250,70 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 28),
                   child: Text(title, style: MText.h1, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
                 ),
+                if (playlist != null && playlist.description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(32, 8, 32, 0),
+                    child: Text(playlist.description, style: MText.body, textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  ),
                 const SizedBox(height: 6),
-                Text(subtitle, style: MText.body),
-                const SizedBox(height: 20),
-                if (tracks != null && tracks.isNotEmpty)
+                Text(_subtitle(lib, tracks, playlist), style: MText.caption),
+                const SizedBox(height: 18),
+                _SecondaryActions(widget: widget, playlist: playlist),
+                if (tracks != null && tracks.isNotEmpty) ...[
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      PillButton(
-                        label: 'Play',
-                        icon: Icons.play_arrow_rounded,
-                        filled: true,
-                        onTap: () => player.playTracks(tracks, from: title),
-                      ),
+                      PillButton(label: 'Play', icon: Icons.play_arrow_rounded, filled: true, onTap: () => player.playTracks(tracks, from: title)),
                       const SizedBox(width: 12),
-                      PillButton(
-                        label: 'Shuffle',
-                        icon: Icons.shuffle_rounded,
-                        onTap: () => player.playTracks(tracks, shuffled: true, from: title),
-                      ),
+                      PillButton(label: 'Shuffle', icon: Icons.shuffle_rounded, onTap: () => player.playTracks(tracks, shuffled: true, from: title)),
                     ],
                   ),
-                const SizedBox(height: 14),
+                ],
+                if (tracks != null && tracks.length > 6)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+                    child: Glass(
+                      radius: 14,
+                      blur: 14,
+                      child: SizedBox(
+                        height: 42,
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 12),
+                            const Icon(Icons.search_rounded, size: 19, color: MColors.textTertiary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _filterCtrl,
+                                onChanged: (v) => setState(() => _filter = v.trim()),
+                                style: MText.body.copyWith(color: MColors.text),
+                                decoration: InputDecoration(
+                                  isCollapsed: true,
+                                  border: InputBorder.none,
+                                  hintText: 'Find in ${playlist != null ? 'playlist' : widget.kind == CollectionKind.liked ? 'Liked Songs' : 'this list'}',
+                                  hintStyle: const TextStyle(color: MColors.textTertiary),
+                                ),
+                              ),
+                            ),
+                            if (_filter.isNotEmpty)
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 18, color: MColors.textSecondary),
+                                onPressed: () => setState(() {
+                                  _filterCtrl.clear();
+                                  _filter = '';
+                                }),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
               ],
             ),
           ),
-          if (tracks == null)
+          if (shown == null)
             const SliverToBoxAdapter(
               child: Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
             )
@@ -228,18 +323,25 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 child: PillButton(label: "Couldn't load · Retry", icon: Icons.refresh_rounded, compact: true, onTap: _retry),
               ),
             )
-          else if (tracks.isEmpty)
-            SliverToBoxAdapter(child: _EmptyState(kind: widget.kind, onImport: () => _import(context)))
+          else if (shown.isEmpty)
+            SliverToBoxAdapter(
+              child: q.isNotEmpty
+                  ? Padding(padding: const EdgeInsets.all(30), child: Text('No songs match “$_filter”', style: MText.body, textAlign: TextAlign.center))
+                  : _EmptyState(
+                      kind: widget.kind,
+                      onImport: () => _import(context),
+                      onAddSongs: playlist == null ? null : () => showAddSongs(context, playlist),
+                    ),
+            )
+          else if (canReorder)
+            SliverReorderableList(
+              itemCount: shown.length,
+              onReorderItem: (from, to) => lib.movePlaylistTrack(playlist, from, to),
+              proxyDecorator: (child, _, _) => Material(color: Colors.transparent, child: child),
+              itemBuilder: (_, i) => tile(i),
+            )
           else
-            SliverList.builder(
-              itemCount: tracks.length,
-              itemBuilder: (context, i) => TrackTile(
-                track: tracks[i],
-                index: i,
-                playlist: playlist,
-                onTap: () => player.playTracks(tracks, index: i, from: title),
-              ),
-            ),
+            SliverList.builder(itemCount: shown.length, itemBuilder: (_, i) => tile(i)),
           SliverToBoxAdapter(child: SizedBox(height: bottomInset(context))),
         ],
       ),
@@ -254,6 +356,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   void _playlistMenu(BuildContext context, UserPlaylist p) {
     final lib = context.read<LibraryStore>();
+    final nav = Navigator.of(context);
     showGlassSheet(
       context,
       builder: (ctx) => Column(
@@ -261,12 +364,36 @@ class _CollectionScreenState extends State<CollectionScreen> {
         children: [
           const SizedBox(height: 12),
           SheetAction(
-            icon: Icons.edit_rounded,
-            label: 'Rename',
-            onTap: () async {
+            icon: Icons.add_rounded,
+            label: 'Add songs',
+            onTap: () {
               Navigator.pop(ctx);
-              final name = await askText(context, title: 'Rename playlist', initial: p.name);
-              if (name != null) lib.renamePlaylist(p, name);
+              showAddSongs(context, p);
+            },
+          ),
+          SheetAction(
+            icon: Icons.edit_rounded,
+            label: 'Edit details & cover',
+            onTap: () {
+              Navigator.pop(ctx);
+              showPlaylistEditor(context, p);
+            },
+          ),
+          SheetAction(
+            icon: p.pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+            label: p.pinned ? 'Unpin from Library' : 'Pin to top of Library',
+            onTap: () {
+              Navigator.pop(ctx);
+              lib.togglePin(p);
+            },
+          ),
+          SheetAction(
+            icon: Icons.copy_rounded,
+            label: 'Duplicate playlist',
+            onTap: () {
+              Navigator.pop(ctx);
+              final copy = lib.duplicatePlaylist(p);
+              nav.push(FadeRoute(CollectionScreen.userPlaylist(copy)));
             },
           ),
           SheetAction(
@@ -276,7 +403,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             onTap: () {
               Navigator.pop(ctx);
               lib.deletePlaylist(p);
-              Navigator.maybePop(context);
+              nav.maybePop();
             },
           ),
           const SizedBox(height: 8),
@@ -286,18 +413,298 @@ class _CollectionScreenState extends State<CollectionScreen> {
   }
 }
 
+/// Follow (artists), Save (other people's playlists), Add songs / Edit
+/// (your playlists).
+class _SecondaryActions extends StatelessWidget {
+  const _SecondaryActions({required this.widget, required this.playlist});
+
+  final CollectionScreen widget;
+  final UserPlaylist? playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final lib = context.watch<LibraryStore>();
+    if (widget.artist != null) {
+      final following = lib.isFollowing(widget.artist!);
+      return PillButton(
+        label: following ? 'Following' : 'Follow',
+        icon: following ? Icons.check_rounded : Icons.person_add_alt_1_rounded,
+        compact: true,
+        onTap: () => lib.toggleFollow(widget.artist!),
+      );
+    }
+    if (widget.collection != null) {
+      final saved = lib.isPlaylistSaved(widget.collection!);
+      return PillButton(
+        label: saved ? 'Saved to Library' : 'Save to Library',
+        icon: saved ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+        compact: true,
+        onTap: () {
+          final now = lib.toggleSavePlaylist(widget.collection!);
+          toast(context, now ? 'Saved to your Library' : 'Removed from your Library');
+        },
+      );
+    }
+    if (playlist != null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          PillButton(label: 'Add songs', icon: Icons.add_rounded, compact: true, onTap: () => showAddSongs(context, playlist!)),
+          const SizedBox(width: 8),
+          PillButton(label: 'Edit', icon: Icons.edit_rounded, compact: true, onTap: () => showPlaylistEditor(context, playlist!)),
+        ],
+      );
+    }
+    return const SizedBox.shrink();
+  }
+}
+
+bool get _hasCamera => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+/// Edit a playlist's cover photo, name and description.
+void showPlaylistEditor(BuildContext context, UserPlaylist p) {
+  final lib = context.read<LibraryStore>();
+  final name = TextEditingController(text: p.name);
+  final desc = TextEditingController(text: p.description);
+  showGlassSheet(
+    context,
+    builder: (ctx) => ListenableBuilder(
+      listenable: lib,
+      builder: (ctx, _) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Edit playlist', style: MText.h2),
+            const SizedBox(height: 18),
+            SizedBox.square(dimension: 150, child: PlaylistCover(playlist: p, radius: 18)),
+            const SizedBox(height: 12),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                PillButton(label: 'Choose photo', icon: Icons.photo_library_rounded, compact: true, onTap: () => lib.pickPlaylistCover(p)),
+                if (_hasCamera)
+                  PillButton(
+                    label: 'Take photo',
+                    icon: Icons.photo_camera_rounded,
+                    compact: true,
+                    onTap: () => lib.pickPlaylistCover(p, source: ImageSource.camera),
+                  ),
+                if (p.coverPath != null)
+                  PillButton(label: 'Use song covers', icon: Icons.grid_view_rounded, compact: true, onTap: () => lib.removePlaylistCover(p)),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _Field(controller: name, label: 'Name', maxLength: 60),
+            const SizedBox(height: 10),
+            _Field(controller: desc, label: 'Description (optional)', maxLength: 200, lines: 3),
+            const SizedBox(height: 22),
+            PillButton(
+              label: 'Save',
+              filled: true,
+              onTap: () {
+                lib.editPlaylist(p, name: name.text, description: desc.text);
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _Field extends StatelessWidget {
+  const _Field({required this.controller, required this.label, this.maxLength, this.lines = 1});
+
+  final TextEditingController controller;
+  final String label;
+  final int? maxLength;
+  final int lines;
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: controller,
+        maxLength: maxLength,
+        minLines: 1,
+        maxLines: lines,
+        style: const TextStyle(fontSize: 16, color: MColors.text, fontWeight: FontWeight.w500),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: MColors.textTertiary),
+          counterText: '',
+          filled: true,
+          fillColor: const Color(0x12FFFFFF),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: MColors.lavender)),
+        ),
+      );
+}
+
+/// Search Audius and tap + to add songs straight into a playlist.
+void showAddSongs(BuildContext context, UserPlaylist p) {
+  showGlassSheet(context, builder: (_) => _AddSongsView(playlist: p));
+}
+
+class _AddSongsView extends StatefulWidget {
+  const _AddSongsView({required this.playlist});
+  final UserPlaylist playlist;
+
+  @override
+  State<_AddSongsView> createState() => _AddSongsViewState();
+}
+
+class _AddSongsViewState extends State<_AddSongsView> {
+  final _api = AudiusApi();
+  Timer? _debounce;
+  String _query = '';
+  late Future<List<Track>> _future = _suggestions();
+
+  Future<List<Track>> _suggestions() {
+    final genres = widget.playlist.tracks.map((t) => t.genre).whereType<String>().where(AudiusApi.genres.contains).toList();
+    return _api.trending(genre: genres.isEmpty ? null : genres.first, limit: 30);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lib = context.watch<LibraryStore>();
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.82,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 16, 22, 4),
+            child: Text('Add to ${widget.playlist.name}', style: MText.h2, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+            child: Glass(
+              radius: 14,
+              blur: 14,
+              child: SizedBox(
+                height: 46,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 12),
+                    const Icon(Icons.search_rounded, color: MColors.lavender, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        autofocus: false,
+                        style: MText.title.copyWith(fontWeight: FontWeight.w500),
+                        decoration: const InputDecoration(
+                          isCollapsed: true,
+                          border: InputBorder.none,
+                          hintText: 'Search songs to add',
+                          hintStyle: TextStyle(color: MColors.textTertiary, fontWeight: FontWeight.w400),
+                        ),
+                        onChanged: (v) {
+                          _debounce?.cancel();
+                          _debounce = Timer(const Duration(milliseconds: 400), () {
+                            setState(() {
+                              _query = v.trim();
+                              _future = _query.isEmpty ? _suggestions() : _api.searchTracks(_query);
+                            });
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(_query.isEmpty ? 'RECOMMENDED' : 'RESULTS', style: MText.label),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Track>>(
+              future: _future,
+              builder: (_, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                }
+                final list = snap.data ?? const <Track>[];
+                if (list.isEmpty) return const Center(child: Text('No songs found', style: MText.body));
+                return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  itemCount: list.length,
+                  itemBuilder: (_, i) {
+                    final t = list[i];
+                    final added = widget.playlist.tracks.contains(t);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                      child: Row(
+                        children: [
+                          Artwork(url: t.artworkUrl, size: 48, radius: 8),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: MText.title),
+                                Text(t.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: MText.caption),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                              child: Icon(
+                                added ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
+                                key: ValueKey(added),
+                                color: added ? MColors.lavender : MColors.textSecondary,
+                                size: 28,
+                              ),
+                            ),
+                            onPressed: () {
+                              if (added) {
+                                lib.removeFromPlaylist(widget.playlist, t);
+                              } else {
+                                lib.addToPlaylist(widget.playlist, t);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.kind, required this.onImport});
+  const _EmptyState({required this.kind, required this.onImport, this.onAddSongs});
 
   final CollectionKind kind;
   final VoidCallback onImport;
+  final VoidCallback? onAddSongs;
 
   @override
   Widget build(BuildContext context) {
     final (icon, text) = switch (kind) {
       CollectionKind.liked => (Icons.favorite_border_rounded, 'Songs you like will show up here.\nTap ♡ on any song.'),
       CollectionKind.local => (Icons.audio_file_rounded, 'Add MP3, M4A, FLAC or WAV files\nfrom your device.'),
-      CollectionKind.userPlaylist => (Icons.playlist_add_rounded, 'Add songs with ••• → Add to playlist.'),
+      CollectionKind.userPlaylist => (Icons.playlist_add_rounded, "Let's find some songs for your playlist."),
       CollectionKind.recent => (Icons.history_rounded, 'Nothing played yet.'),
       _ => (Icons.music_off_rounded, 'No songs here.'),
     };
@@ -311,6 +718,10 @@ class _EmptyState extends StatelessWidget {
           if (kind == CollectionKind.local) ...[
             const SizedBox(height: 20),
             PillButton(label: 'Import files', icon: Icons.add_rounded, filled: true, onTap: onImport),
+          ],
+          if (onAddSongs != null) ...[
+            const SizedBox(height: 20),
+            PillButton(label: 'Add songs', icon: Icons.add_rounded, filled: true, onTap: onAddSongs),
           ],
         ],
       ),

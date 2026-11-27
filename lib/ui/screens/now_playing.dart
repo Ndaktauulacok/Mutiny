@@ -11,6 +11,7 @@ import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'collection_screen.dart';
+import 'lyrics_view.dart';
 
 /// Opens the full-screen player, sliding up from the mini player.
 void openNowPlaying(BuildContext context) {
@@ -311,6 +312,9 @@ class _Controls extends StatelessWidget {
               size: 22,
               onTap: () => _sleepSheet(context),
             ),
+            if (!track.isLive)
+              _ToggleIcon(icon: Icons.lyrics_rounded, active: false, size: 23, onTap: () => openLyrics(context, track)),
+            _ToggleIcon(icon: Icons.ios_share_rounded, active: false, size: 22, onTap: () => shareTrack(track)),
             if (!track.isLive)
               _ToggleIcon(icon: Icons.playlist_add_rounded, active: false, size: 24, onTap: () => showAddToPlaylist(context, track)),
             _ToggleIcon(icon: Icons.queue_music_rounded, active: false, size: 24, onTap: () => _queueSheet(context)),

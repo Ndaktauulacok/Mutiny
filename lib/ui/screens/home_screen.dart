@@ -13,7 +13,7 @@ import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'collection_screen.dart';
-import 'settings_sheet.dart';
+import 'profile_screen.dart';
 
 /// Moods the user can tune Flow (the endless mix) to.
 enum FlowMood {
@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: EdgeInsets.only(top: top + 8, bottom: bottomInset(context)),
         children: [
-          _TopBar(onSettings: () => showSettingsSheet(context)),
+          _TopBar(onProfile: () => Navigator.of(context).push(FadeRoute(const ProfileScreen()))),
           _FlowHero(mood: _mood, loading: _flowLoading, onPlay: _playFlow, onTune: _tuneFlow),
           const _JumpBackIn(),
 
@@ -198,6 +198,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 artworkUrl: items[i].artworkUrl,
                 icon: Icons.queue_music_rounded,
                 onTap: () => Navigator.of(context).push(FadeRoute(CollectionScreen.remote(items[i]))),
+                onLongPress: () {
+                  final saved = context.read<LibraryStore>().toggleSavePlaylist(items[i]);
+                  toast(context, saved ? 'Saved to your Library' : 'Removed from your Library');
+                },
               ),
             ),
           ),
@@ -244,9 +248,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onSettings});
+  const _TopBar({required this.onProfile});
 
-  final VoidCallback onSettings;
+  final VoidCallback onProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -266,8 +270,18 @@ class _TopBar extends StatelessWidget {
           const SizedBox(width: 8),
           const Text('Mutiny', style: TextStyle(fontFamily: MText.display, fontSize: 19, fontWeight: FontWeight.w700, color: MColors.lilac)),
           const SizedBox(width: 12),
-          Expanded(child: Text(greeting, style: MText.caption, overflow: TextOverflow.ellipsis)),
-          GlassIconButton(icon: Icons.tune_rounded, iconSize: 19, onTap: onSettings, tooltip: 'Settings'),
+          Expanded(
+            child: Text(
+              '$greeting, ${context.watch<LibraryStore>().profile.name.split(' ').first}',
+              style: MText.caption,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Pressable(
+            onTap: onProfile,
+            scale: 0.9,
+            child: ProfileAvatar(profile: context.watch<LibraryStore>().profile, size: 40),
+          ),
         ],
       ),
     );

@@ -15,7 +15,14 @@ Music comes from free and legal sources:
 - **Daily mixes**: 6 genre mixes with liquid-gradient covers that change every day
 - Trending songs, hot playlists, underground gems, radio in Malaysia
 - Search songs, artists, playlists and radio, with recent searches and genre browsing
-- Liked Songs, your own playlists (create, rename, delete, add/remove songs), saved stations
+- **Profile**: your name and photo, minutes listened, top artists and top songs this month
+- **Playlists**: your own cover photo or an automatic 4-picture mosaic, description, drag to
+  reorder, search inside, **Add songs** with recommendations, pin, duplicate, delete
+- **Library**: Liked Songs, playlists, saved Audius playlists, followed artists, saved
+  stations and files, with filters, Recents / A–Z / Creator sorting and a grid view
+- **Follow** artists and **Save** other people's playlists
+- **Lyrics** that scroll with the song (tap a line to jump), from LRCLIB
+- **Share** songs, and **song radio** (similar songs from the same artist and genre)
 - Full-screen player: blurred-cover background that takes the song's colour, shuffle, repeat / repeat-one, seek
 - Queue: play next, add to queue, drag to reorder, swipe to remove
 - Sleep timer (5 to 60 min, or end of song)

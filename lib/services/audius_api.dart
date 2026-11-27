@@ -109,6 +109,7 @@ class AudiusApi {
       playCount: (t['play_count'] as num?)?.toInt(),
       source: TrackSource.audius,
       uri: streamUrl(id),
+      permalink: t['permalink'] is String ? 'https://audius.co${t['permalink']}' : null,
     );
   }
 

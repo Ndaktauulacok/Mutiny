@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import '../models/models.dart';
+import 'audius_api.dart';
 import 'library_store.dart';
 
 enum RepeatState { off, all, one }
@@ -18,6 +19,7 @@ class PlayerController extends ChangeNotifier {
     _subs.add(player.sequenceStateStream.listen(_onSequence));
     _subs.add(player.playerStateStream.listen((_) => notifyListeners()));
     _subs.add(player.errorStream.listen(_onError));
+    _subs.add(player.positionStream.listen((p) => _lastPosition = p));
     _watchHeadphones();
   }
 
@@ -38,6 +40,7 @@ class PlayerController extends ChangeNotifier {
   void Function(String message)? onMessage;
 
   Track? _current;
+  Duration _lastPosition = Duration.zero;
   String? _lastRecentKey;
   int _consecutiveErrors = 0;
   String? contextName;
@@ -146,6 +149,24 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> playTrack(Track t, {String? from}) => playTracks([t], from: from);
+
+  /// Spotify-style song radio: this song, then similar music
+  /// (same artist + trending in the same genre), shuffled.
+  Future<void> startSongRadio(Track seed) async {
+    onMessage?.call('Starting “${seed.title}” radio…');
+    final api = AudiusApi();
+    final results = await Future.wait([
+      if (seed.artistId != null) api.artistTracks(seed.artistId!).catchError((_) => <Track>[]),
+      api.trending(genre: seed.genre, limit: 40).catchError((_) => <Track>[]),
+    ]);
+    final seen = <String>{seed.key};
+    final mix = [for (final l in results) ...l].where((t) => seen.add(t.key)).toList()..shuffle();
+    if (mix.isEmpty) {
+      onMessage?.call("Couldn't find similar songs");
+      return;
+    }
+    await playTracks([seed, ...mix.take(60)], from: '${seed.title} radio');
+  }
 
   Future<void> addToQueue(Track t) async {
     if (!hasTrack) return playTrack(t);
@@ -258,8 +279,16 @@ class PlayerController extends ChangeNotifier {
   // -------------------------------------------------------------- internals
   void _onSequence(SequenceState st) {
     final prevKey = _current?.key;
+    final prev = _current;
     _current = trackOf(st.currentSource?.tag);
     final key = _current?.key;
+    if (key != prevKey && prev != null) {
+      // Remember how long the previous song was listened to (profile stats).
+      var secs = _lastPosition.inSeconds;
+      if (prev.durationSec != null && secs > prev.durationSec!) secs = prev.durationSec!;
+      library.recordListen(prev, secs);
+      _lastPosition = Duration.zero;
+    }
     if (key != null && key != prevKey) {
       if (sleepAfterTrack && prevKey != null) {
         sleepAfterTrack = false;

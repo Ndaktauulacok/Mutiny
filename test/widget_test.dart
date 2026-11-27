@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mutiny/models/models.dart';
 import 'package:mutiny/services/audius_api.dart';
 import 'package:mutiny/services/library_store.dart';
+import 'package:mutiny/services/lyrics_api.dart';
 import 'package:mutiny/services/radio_api.dart';
 import 'package:mutiny/services/updater.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -105,5 +106,55 @@ void main() {
     expect(info.androidUrl, 'https://d/a.apk');
     expect(info.windowsUrl, 'https://d/w.zip');
     expect(info.iosUrl, 'https://d/i.ipa');
+  });
+
+  test('LRC lyrics parse into timed lines', () {
+    final lines = LyricsApi.parseLrc('[00:12.50] Look at the stars\n[00:17.00]Look how they shine\n[01:02.34]\nno stamp');
+    expect(lines, hasLength(3));
+    expect(lines.first.time, const Duration(milliseconds: 12500));
+    expect(lines.first.text, 'Look at the stars');
+    expect(lines.last.time, const Duration(milliseconds: 62340));
+    expect(LyricsApi.cleanTitle('Yellow (Official Video) ft. Someone'), 'Yellow');
+  });
+
+  test('Playlists keep cover, description, order and pins; stats rank songs', () async {
+    SharedPreferences.setMockInitialValues({});
+    final lib = LibraryStore();
+    await lib.load();
+    Track t(String id, String artist) =>
+        Track(id: id, title: 'Song $id', artist: artist, uri: 'u$id', source: TrackSource.audius, durationSec: 200);
+    final p = lib.createPlaylist('Road trip');
+    expect(lib.addAllToPlaylist(p, [t('1', 'A'), t('2', 'B'), t('3', 'A'), t('1', 'A')]), 3);
+    lib.movePlaylistTrack(p, 0, 2);
+    expect(p.tracks.map((e) => e.id), ['2', '3', '1']);
+    lib.editPlaylist(p, name: 'Road trip 2026', description: 'Kedah to KL');
+    lib.togglePin(p);
+    final copy = lib.duplicatePlaylist(p);
+    expect(copy.tracks, hasLength(3));
+    expect(copy.name, 'Road trip 2026 (copy)');
+
+    lib.setProfileName('Amreel');
+    lib.toggleFollow(const Artist(id: 'a1', name: 'Raar'));
+    lib.toggleSavePlaylist(const Collection(id: 'c1', title: 'Hot & New', subtitle: 'Audius'));
+    lib.recordListen(t('1', 'A'), 120);
+    lib.recordListen(t('1', 'A'), 90);
+    lib.recordListen(t('2', 'B'), 40);
+    lib.recordListen(t('3', 'A'), 10); // under 30s: time counts, not a play
+
+    final again = LibraryStore();
+    await again.load();
+    final saved = again.playlists.firstWhere((x) => x.name == 'Road trip 2026');
+    expect(saved.description, 'Kedah to KL');
+    expect(saved.pinned, isTrue);
+    expect(saved.tracks.map((e) => e.id), ['2', '3', '1']);
+    expect(again.profile.name, 'Amreel');
+    expect(again.profile.initials, 'A');
+    expect(again.followedArtists.single.name, 'Raar');
+    expect(again.savedPlaylists.single.title, 'Hot & New');
+    expect(again.topTracks().first.track.id, '1');
+    expect(again.topTracks().first.plays, 2);
+    expect(again.topTracks().any((s) => s.track.id == '3'), isFalse);
+    expect(again.topArtists().first.$1, 'A');
+    expect(again.totalListenMinutes, 4);
   });
 }

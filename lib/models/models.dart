@@ -15,6 +15,9 @@ class Track {
   final int? playCount;
   final TrackSource source;
 
+  /// Public web link (Audius) used for sharing.
+  final String? permalink;
+
   /// Stream URL (Audius / radio) or file path (local).
   final String uri;
 
@@ -30,6 +33,7 @@ class Track {
     this.durationSec,
     this.genre,
     this.playCount,
+    this.permalink,
   });
 
   bool get isLive => source == TrackSource.radio;
@@ -51,6 +55,7 @@ class Track {
         'playCount': playCount,
         'source': source.name,
         'uri': uri,
+        'permalink': permalink,
       };
 
   factory Track.fromJson(Map<String, dynamic> j) => Track(
@@ -68,6 +73,7 @@ class Track {
           orElse: () => TrackSource.audius,
         ),
         uri: j['uri'] as String? ?? '',
+        permalink: j['permalink'] as String?,
       );
 
   @override
@@ -91,6 +97,28 @@ class Collection {
     this.artworkUrl,
     this.trackCount,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'subtitle': subtitle,
+        'artworkUrl': artworkUrl,
+        'trackCount': trackCount,
+      };
+
+  factory Collection.fromJson(Map<String, dynamic> j) => Collection(
+        id: j['id'] as String,
+        title: j['title'] as String? ?? 'Playlist',
+        subtitle: j['subtitle'] as String? ?? '',
+        artworkUrl: j['artworkUrl'] as String?,
+        trackCount: j['trackCount'] as int?,
+      );
+
+  @override
+  bool operator ==(Object other) => other is Collection && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class Artist {
@@ -107,20 +135,53 @@ class Artist {
     this.followers = 0,
     this.trackCount = 0,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'avatarUrl': avatarUrl,
+        'followers': followers,
+        'trackCount': trackCount,
+      };
+
+  factory Artist.fromJson(Map<String, dynamic> j) => Artist(
+        id: j['id'] as String,
+        name: j['name'] as String? ?? 'Artist',
+        avatarUrl: j['avatarUrl'] as String?,
+        followers: j['followers'] as int? ?? 0,
+        trackCount: j['trackCount'] as int? ?? 0,
+      );
+
+  @override
+  bool operator ==(Object other) => other is Artist && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class UserPlaylist {
   final String id;
   String name;
+  String description;
+
+  /// Photo the user picked for the cover (file in app storage), or null
+  /// for the automatic 4-artwork mosaic.
+  String? coverPath;
+  bool pinned;
   final List<Track> tracks;
   final DateTime created;
+  DateTime updated;
 
   UserPlaylist({
     required this.id,
     required this.name,
     required this.tracks,
     required this.created,
-  });
+    this.description = '',
+    this.coverPath,
+    this.pinned = false,
+    DateTime? updated,
+  }) : updated = updated ?? created;
 
   String? get coverUrl {
     for (final t in tracks) {
@@ -129,20 +190,88 @@ class UserPlaylist {
     return null;
   }
 
+  /// Up to four different artworks for the Spotify-style mosaic cover.
+  List<String> get mosaic {
+    final out = <String>[];
+    for (final t in tracks) {
+      final a = t.artworkUrl;
+      if (a != null && !out.contains(a)) out.add(a);
+      if (out.length == 4) break;
+    }
+    return out;
+  }
+
+  int get totalSeconds => tracks.fold(0, (s, t) => s + (t.durationSec ?? 0));
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'description': description,
+        'coverPath': coverPath,
+        'pinned': pinned,
         'created': created.toIso8601String(),
+        'updated': updated.toIso8601String(),
         'tracks': tracks.map((t) => t.toJson()).toList(),
       };
 
   factory UserPlaylist.fromJson(Map<String, dynamic> j) => UserPlaylist(
         id: j['id'] as String,
         name: j['name'] as String? ?? 'Playlist',
+        description: j['description'] as String? ?? '',
+        coverPath: j['coverPath'] as String?,
+        pinned: j['pinned'] as bool? ?? false,
         created: DateTime.tryParse(j['created'] as String? ?? '') ?? DateTime.now(),
+        updated: DateTime.tryParse(j['updated'] as String? ?? ''),
         tracks: ((j['tracks'] as List?) ?? const [])
             .map((e) => Track.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
+      );
+}
+
+/// The person using Mutiny on this device.
+class Profile {
+  String name;
+  String? avatarPath;
+  final DateTime since;
+
+  Profile({required this.name, this.avatarPath, DateTime? since}) : since = since ?? DateTime.now();
+
+  String get initials {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    return parts.take(2).map((p) => p[0].toUpperCase()).join();
+  }
+
+  Map<String, dynamic> toJson() => {'name': name, 'avatarPath': avatarPath, 'since': since.toIso8601String()};
+
+  factory Profile.fromJson(Map<String, dynamic> j) => Profile(
+        name: j['name'] as String? ?? 'Listener',
+        avatarPath: j['avatarPath'] as String?,
+        since: DateTime.tryParse(j['since'] as String? ?? ''),
+      );
+}
+
+/// How often a song was played (for the profile's top songs / artists).
+class PlayStat {
+  final Track track;
+  int plays;
+  int seconds;
+  DateTime last;
+
+  PlayStat({required this.track, this.plays = 0, this.seconds = 0, DateTime? last}) : last = last ?? DateTime.now();
+
+  Map<String, dynamic> toJson() => {
+        'track': track.toJson(),
+        'plays': plays,
+        'seconds': seconds,
+        'last': last.toIso8601String(),
+      };
+
+  factory PlayStat.fromJson(Map<String, dynamic> j) => PlayStat(
+        track: Track.fromJson(Map<String, dynamic>.from(j['track'] as Map)),
+        plays: j['plays'] as int? ?? 0,
+        seconds: j['seconds'] as int? ?? 0,
+        last: DateTime.tryParse(j['last'] as String? ?? ''),
       );
 }
 

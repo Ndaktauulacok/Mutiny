@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
@@ -62,6 +66,7 @@ class TrackTile extends StatelessWidget {
     this.index,
     this.playlist,
     this.showArtwork = true,
+    this.trailing,
   });
 
   final Track track;
@@ -69,6 +74,9 @@ class TrackTile extends StatelessWidget {
   final int? index;
   final UserPlaylist? playlist;
   final bool showArtwork;
+
+  /// Extra widget at the end of the row (e.g. a drag handle).
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +160,7 @@ class TrackTile extends StatelessWidget {
               icon: const Icon(Icons.more_horiz_rounded, color: MColors.textSecondary),
               onPressed: () => showTrackMenu(context, track, playlist: playlist),
             ),
+            ?trailing,
           ],
         ),
       ),
@@ -430,6 +439,23 @@ Future<void> showTrackMenu(BuildContext context, Track track, {UserPlaylist? pla
                 },
               ),
             ],
+            if (track.source == TrackSource.audius)
+              SheetAction(
+                icon: Icons.radar_rounded,
+                label: 'Go to song radio',
+                onTap: () {
+                  close();
+                  player.startSongRadio(track);
+                },
+              ),
+            SheetAction(
+              icon: Icons.ios_share_rounded,
+              label: 'Share',
+              onTap: () {
+                close();
+                shareTrack(track);
+              },
+            ),
             if (track.artistId != null)
               SheetAction(
                 icon: Icons.person_rounded,
@@ -517,4 +543,107 @@ Future<void> showAddToPlaylist(BuildContext context, Track track) {
       ),
     ),
   );
+}
+
+
+// ---------------------------------------------------------- shared bits
+
+Future<void> shareTrack(Track t) {
+  final text = t.isLive
+      ? '📻 Listening to ${t.title} live on Mutiny'
+      : t.permalink != null
+          ? '🎧 ${t.title} by ${t.artist}\n${t.permalink}\n\nListening on Mutiny'
+          : '🎧 ${t.title} by ${t.artist}, listening on Mutiny';
+  return SharePlus.instance.share(ShareParams(text: text, subject: t.title));
+}
+
+/// A photo saved in the app's storage (playlist cover, profile picture).
+class FileImageBox extends StatelessWidget {
+  const FileImageBox({super.key, required this.path, required this.fallback});
+
+  final String path;
+  final Widget fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb || !File(path).existsSync()) return fallback;
+    return Image.file(File(path), fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_, _, _) => fallback);
+  }
+}
+
+/// Playlist cover: the user's own photo, else a 2×2 mosaic of the songs'
+/// artwork (like Spotify), else a gradient with an icon.
+class PlaylistCover extends StatelessWidget {
+  const PlaylistCover({super.key, required this.playlist, this.radius = 10});
+
+  final UserPlaylist playlist;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+          colors: [Color(0xFF2E1065), Color(0xFF7C3AED)],
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (_, c) => Center(
+          child: Icon(Icons.queue_music_rounded, color: Colors.white, size: c.biggest.shortestSide * 0.4),
+        ),
+      ),
+    );
+    Widget child;
+    if (playlist.coverPath != null) {
+      child = FileImageBox(path: playlist.coverPath!, fallback: fallback);
+    } else {
+      final arts = playlist.mosaic;
+      if (arts.isEmpty) {
+        child = fallback;
+      } else if (arts.length < 4) {
+        child = Artwork(url: arts.first, radius: 0);
+      } else {
+        child = GridView.count(
+          crossAxisCount: 2,
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [for (final a in arts) Artwork(url: a, radius: 0)],
+        );
+      }
+    }
+    return ClipRRect(borderRadius: BorderRadius.circular(radius), child: SizedBox.expand(child: child));
+  }
+}
+
+/// Round profile picture, or initials on a purple gradient.
+class ProfileAvatar extends StatelessWidget {
+  const ProfileAvatar({super.key, required this.profile, this.size = 36});
+
+  final Profile profile;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(colors: [MColors.lavender, MColors.violet], begin: Alignment.topLeft, end: Alignment.bottomRight),
+      ),
+      child: Center(
+        child: Text(
+          profile.initials,
+          style: TextStyle(fontFamily: MText.display, fontWeight: FontWeight.w700, fontSize: size * 0.36, color: MColors.bg),
+        ),
+      ),
+    );
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: MColors.glassBorder, width: size > 60 ? 2 : 1)),
+      child: ClipOval(
+        child: profile.avatarPath == null ? initials : FileImageBox(path: profile.avatarPath!, fallback: initials),
+      ),
+    );
+  }
 }
