@@ -11,6 +11,7 @@ import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'collection_screen.dart';
+import 'connect_sheet.dart';
 import 'lyrics_view.dart';
 
 /// Opens the full-screen player, sliding up from the mini player.
@@ -162,11 +163,25 @@ class _TopBar extends StatelessWidget {
               Text(track.isLive ? 'LIVE RADIO' : 'PLAYING FROM', style: MText.label),
               const SizedBox(height: 3),
               Text(
-                player.contextName ?? (track.isLocal ? 'Your device' : 'Mutiny'),
+                player.contextName ?? (track.isLocal ? 'Your songs' : 'Mutiny'),
                 style: MText.title.copyWith(fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (player.remote != null) ...[
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () => showConnectSheet(context),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.speaker_group_rounded, size: 14, color: MColors.purple),
+                      const SizedBox(width: 5),
+                      Text('Playing on ${player.remote!.name}', style: MText.caption.copyWith(color: MColors.purple, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -313,6 +328,7 @@ class _Controls extends StatelessWidget {
             ),
             if (!track.isLive)
               _ToggleIcon(icon: Icons.lyrics_rounded, active: false, size: 23, onTap: () => openLyrics(context, track)),
+            const ConnectButton(size: 22),
             _ToggleIcon(icon: Icons.ios_share_rounded, active: false, size: 22, onTap: () => shareTrack(track)),
             if (!track.isLive)
               _ToggleIcon(icon: Icons.playlist_add_rounded, active: false, size: 24, onTap: () => showAddToPlaylist(context, track)),

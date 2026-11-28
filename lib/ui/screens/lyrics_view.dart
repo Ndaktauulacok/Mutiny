@@ -110,7 +110,7 @@ class _LyricsViewState extends State<LyricsView> {
 
   void _tick() {
     if (_lines.isEmpty || _player.current != _track) return;
-    final pos = _player.player.position + const Duration(milliseconds: 200); // sing slightly ahead, like Apple Music
+    final pos = _player.position + const Duration(milliseconds: 200); // sing slightly ahead, like Apple Music
     var idx = -1;
     // Lines are sorted: binary search for the last line that has started.
     var lo = 0, hi = _lines.length - 1;

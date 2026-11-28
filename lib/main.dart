@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import 'services/updater.dart';
 import 'services/cloud_sync.dart';
+import 'services/connect_service.dart';
 import 'services/library_store.dart';
 import 'services/player_controller.dart';
 import 'ui/shell.dart';
@@ -52,12 +53,18 @@ Future<void> main() async {
   final cloud = CloudSync(library);
   await cloud.init();
 
+  final player = PlayerController(library);
+  // Control music on the user's other devices (Mutiny Connect).
+  final connect = ConnectService(player: player, cloud: cloud);
+  unawaited(connect.start());
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: library),
         ChangeNotifierProvider.value(value: cloud),
-        ChangeNotifierProvider(create: (_) => PlayerController(library)),
+        ChangeNotifierProvider.value(value: player),
+        ChangeNotifierProvider.value(value: connect),
       ],
       child: const MutinyApp(),
     ),

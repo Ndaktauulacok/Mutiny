@@ -56,6 +56,9 @@ class CloudSync extends ChangeNotifier {
   int pendingDownloads = 0;
 
   User? get user => _client?.auth.currentUser;
+
+  /// The Supabase connection (for Mutiny Connect).
+  SupabaseClient? get client => _client;
   bool get signedIn => user != null;
   String? get email => user?.email;
 

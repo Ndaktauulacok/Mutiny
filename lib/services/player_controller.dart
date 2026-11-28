@@ -14,6 +14,24 @@ import 'library_store.dart';
 
 enum RepeatState { off, all, one }
 
+/// Another of the user's devices that this one is controlling (Mutiny
+/// Connect). While set, the player shows that device's music and every
+/// button sends a command to it instead of playing here.
+abstract class RemotePlayer {
+  String get name;
+  Track? get current;
+  bool get playing;
+  Duration get position;
+  Duration? get duration;
+  List<Track> get queue;
+  int get queueIndex;
+  bool get shuffle;
+  RepeatState get repeat;
+  String? get contextName;
+  Stream<Duration> get positionStream;
+  void command(String cmd, [Map<String, dynamic> args = const {}]);
+}
+
 /// The playback engine: one queue, shuffle, repeat, sleep timer,
 /// lock-screen controls (via just_audio_background on iOS/Android).
 class PlayerController extends ChangeNotifier {
@@ -49,34 +67,60 @@ class PlayerController extends ChangeNotifier {
   Duration _lastPosition = Duration.zero;
   String? _lastRecentKey;
   int _consecutiveErrors = 0;
-  String? contextName;
+  String? _contextName;
 
-  Track? get current => _current;
-  bool get hasTrack => _current != null;
-  bool get playing => player.playing;
+  // ------------------------------------------------------- remote (Connect)
+  RemotePlayer? _remote;
+
+  /// The device being controlled, or null when music plays here.
+  RemotePlayer? get remote => _remote;
+  set remote(RemotePlayer? r) {
+    _remote = r;
+    notifyListeners();
+  }
+
+  /// Called by Connect when the controlled device reports something new.
+  void remoteChanged() => notifyListeners();
+
+  /// Where "Playing from" points (playlist name…).
+  String? get contextName => _remote != null ? _remote!.contextName : _contextName;
+  set contextName(String? v) => _contextName = v;
+
+  Track? get current => _remote != null ? _remote!.current : _current;
+  bool get hasTrack => current != null;
+  bool get playing => _remote?.playing ?? player.playing;
   bool get buffering =>
-      player.processingState == ProcessingState.loading ||
-      player.processingState == ProcessingState.buffering;
+      _remote == null &&
+      (player.processingState == ProcessingState.loading || player.processingState == ProcessingState.buffering);
+
+  /// What is playing on this device itself (ignores Connect).
+  Track? get localTrack => _current;
+  bool get localPlaying => player.playing;
   static const _kShuffle = 'mutiny.shuffle';
   bool _shuffleOn = false;
 
   /// Shuffle switch, like Spotify's: when on, Play starts the list in a
   /// random order; when off, songs play in order. Remembered across launches.
-  bool get shuffle => _shuffleOn;
-  RepeatState get repeat => switch (player.loopMode) {
+  bool get shuffle => _remote?.shuffle ?? _shuffleOn;
+  RepeatState get repeat => _remote?.repeat ?? localRepeat;
+  RepeatState get localRepeat => switch (player.loopMode) {
         LoopMode.off => RepeatState.off,
         LoopMode.all => RepeatState.all,
         LoopMode.one => RepeatState.one,
       };
 
-  Stream<Duration> get positionStream => player.positionStream;
-  Duration get position => player.position;
-  Duration? get duration => player.duration ??
+  Stream<Duration> get positionStream => _remote?.positionStream ?? player.positionStream;
+  Duration get position => _remote?.position ?? player.position;
+  Duration? get duration => _remote != null ? _remote!.duration : localDuration;
+  Duration? get localDuration => player.duration ??
       (_current?.durationSec != null ? Duration(seconds: _current!.durationSec!) : null);
 
   // ---------------------------------------------------------------- queue
   /// The queue in play order (shuffled order when shuffle is on).
-  List<Track> get queue => player.sequenceState.effectiveSequence
+  List<Track> get queue => _remote?.queue ?? localQueue;
+
+  /// This device's own queue.
+  List<Track> get localQueue => player.sequenceState.effectiveSequence
       .map((s) => trackOf(s.tag))
       .whereType<Track>()
       .toList();
@@ -87,7 +131,8 @@ class PlayerController extends ChangeNotifier {
   /// order) instead of the audio engine's shuffle mode: on Windows the
   /// engine shuffled its own copy of the list, so skipping went out of step
   /// and songs played in order. Queue position = engine index, always.
-  int get queueIndex => player.sequenceState.currentIndex ?? 0;
+  int get queueIndex => _remote?.queueIndex ?? localQueueIndex;
+  int get localQueueIndex => player.sequenceState.currentIndex ?? 0;
 
   int _sequenceIndexFor(int queuePos) => queuePos;
 
@@ -133,7 +178,26 @@ class PlayerController extends ChangeNotifier {
     String? from,
   }) async {
     if (tracks.isEmpty) return;
-    contextName = from;
+    if (_remote != null) {
+      _remote!.command('playTracks', {
+        'tracks': [for (final t in tracks.take(300)) t.toJson()],
+        'index': index,
+        'shuffled': shuffled,
+        'from': from,
+      });
+      return;
+    }
+    return _playTracksLocal(tracks, index: index, shuffled: shuffled, from: from);
+  }
+
+  Future<void> _playTracksLocal(
+    List<Track> tracks, {
+    int? index,
+    bool? shuffled,
+    String? from,
+  }) async {
+    if (tracks.isEmpty) return;
+    _contextName = from;
     _consecutiveErrors = 0;
     final shuffleThis = (shuffled ?? _shuffleOn) && tracks.length > 1;
     _original = List.of(tracks);
@@ -193,7 +257,16 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> addToQueue(Track t) async {
-    if (!hasTrack) return playTrack(t);
+    if (_remote != null) {
+      _remote!.command('add', {'track': t.toJson()});
+      onMessage?.call('Added to queue on ${_remote!.name}');
+      return;
+    }
+    return _addToQueueLocal(t);
+  }
+
+  Future<void> _addToQueueLocal(Track t) async {
+    if (_current == null) return _playTracksLocal([t]);
     _original.add(t);
     await player.addAudioSource(sourceFor(t));
     onMessage?.call('Added to queue');
@@ -201,7 +274,16 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> playNext(Track t) async {
-    if (!hasTrack) return playTrack(t);
+    if (_remote != null) {
+      _remote!.command('playNext', {'track': t.toJson()});
+      onMessage?.call('Plays next on ${_remote!.name}');
+      return;
+    }
+    return _playNextLocal(t);
+  }
+
+  Future<void> _playNextLocal(Track t) async {
+    if (_current == null) return _playTracksLocal([t]);
     final i = player.currentIndex ?? -1;
     final cur = _current == null ? -1 : _original.indexOf(_current!);
     _original.insert(cur + 1, t);
@@ -211,7 +293,12 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> removeFromQueue(int queuePos) async {
-    if (queuePos == queueIndex) return;
+    if (_remote != null) return _remote!.command('remove', {'i': queuePos});
+    return _removeLocal(queuePos);
+  }
+
+  Future<void> _removeLocal(int queuePos) async {
+    if (queuePos == localQueueIndex) return;
     await player.removeAudioSourceAt(_sequenceIndexFor(queuePos));
     notifyListeners();
   }
@@ -221,19 +308,34 @@ class PlayerController extends ChangeNotifier {
 
   /// [to] is the final index (already adjusted for the removed item).
   Future<void> moveInQueue(int from, int to) async {
+    if (_remote != null) return _remote!.command('move', {'from': from, 'to': to});
+    return _moveLocal(from, to);
+  }
+
+  Future<void> _moveLocal(int from, int to) async {
     if (!canReorder || from == to) return;
     await player.moveAudioSource(from, to);
     notifyListeners();
   }
 
   Future<void> jumpTo(int queuePos) async {
+    if (_remote != null) return _remote!.command('jump', {'i': queuePos});
+    return _jumpLocal(queuePos);
+  }
+
+  Future<void> _jumpLocal(int queuePos) async {
     await player.seek(Duration.zero, index: _sequenceIndexFor(queuePos));
     if (!player.playing) unawaited(player.play());
   }
 
   // ------------------------------------------------------------- transport
   Future<void> togglePlay() async {
-    if (!hasTrack) return;
+    if (_remote != null) return _remote!.command(_remote!.playing ? 'pause' : 'play');
+    return _toggleLocal();
+  }
+
+  Future<void> _toggleLocal() async {
+    if (_current == null) return;
     if (player.playing) {
       await player.pause();
     } else {
@@ -245,6 +347,11 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> next() async {
+    if (_remote != null) return _remote!.command('next');
+    return _nextLocal();
+  }
+
+  Future<void> _nextLocal() async {
     if (player.hasNext) {
       await player.seekToNext();
     } else if (player.loopMode == LoopMode.off) {
@@ -254,6 +361,11 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> previous() async {
+    if (_remote != null) return _remote!.command('previous');
+    return _previousLocal();
+  }
+
+  Future<void> _previousLocal() async {
     if (player.position > const Duration(seconds: 3) || !player.hasPrevious) {
       await player.seek(Duration.zero);
     } else {
@@ -261,9 +373,12 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  Future<void> seek(Duration d) => player.seek(d);
+  Future<void> seek(Duration d) async {
+    if (_remote != null) return _remote!.command('seek', {'ms': d.inMilliseconds});
+    return player.seek(d);
+  }
 
-  Future<void> toggleShuffle() => setShuffle(!_shuffleOn);
+  Future<void> toggleShuffle() => setShuffle(!shuffle);
 
   /// [tracks] in play order: unchanged, or [first] (or a random song) first
   /// and every other song after it in random order.
@@ -312,10 +427,15 @@ class PlayerController extends ChangeNotifier {
   /// Turns the shuffle switch on/off; the current queue follows it at once,
   /// without interrupting the song that is playing.
   Future<void> setShuffle(bool on) async {
+    if (_remote != null) return _remote!.command('shuffle', {'on': on});
+    return _setShuffleLocal(on);
+  }
+
+  Future<void> _setShuffleLocal(bool on) async {
     _shuffleOn = on;
     notifyListeners();
     unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_kShuffle, on)));
-    final q = queue;
+    final q = localQueue;
     final i = player.currentIndex;
     if (q.length < 2 || i == null || i >= q.length) return;
     final r = reorderAround(q, i, _original, shuffle: on);
@@ -334,6 +454,11 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> cycleRepeat() async {
+    if (_remote != null) return _remote!.command('repeat');
+    return _cycleRepeatLocal();
+  }
+
+  Future<void> _cycleRepeatLocal() async {
     final next = switch (player.loopMode) {
       LoopMode.off => LoopMode.all,
       LoopMode.all => LoopMode.one,
@@ -341,6 +466,89 @@ class PlayerController extends ChangeNotifier {
     };
     await player.setLoopMode(next);
     notifyListeners();
+  }
+
+  // -------------------------------------------------- Connect (this device)
+  /// What this device is playing, for the user's other devices.
+  Map<String, dynamic> localState() {
+    final q = localQueue;
+    final i = localQueueIndex;
+    // Send a window of the queue around the current song (keeps it small).
+    final start = (i - 20).clamp(0, q.isEmpty ? 0 : q.length - 1);
+    final end = (i + 80).clamp(0, q.length);
+    return {
+      'track': _current?.toJson(),
+      'playing': player.playing,
+      'positionMs': player.position.inMilliseconds,
+      'durationMs': localDuration?.inMilliseconds,
+      'queue': [for (final t in q.sublist(start, end)) t.toJson()],
+      'index': i - start,
+      'shuffle': _shuffleOn,
+      'repeat': localRepeat.name,
+      'from': _contextName,
+    };
+  }
+
+  /// Own songs live at a different path on each device: use this device's copy.
+  Track? _resolve(Object? json) {
+    if (json is! Map) return null;
+    final t = Track.fromJson(Map<String, dynamic>.from(json));
+    if (!t.isLocal) return t;
+    for (final mine in library.localTracks) {
+      if (mine.id == t.id) return mine;
+    }
+    return null; // that song's file isn't on this device (yet)
+  }
+
+  List<Track> _resolveAll(Object? list) => [
+        if (list is List)
+          for (final j in list) ?_resolve(j),
+      ];
+
+  /// Runs a command sent by another of the user's devices.
+  Future<void> handleRemoteCommand(String cmd, Map<String, dynamic> a) async {
+    int i(String k) => (a[k] as num?)?.toInt() ?? 0;
+    switch (cmd) {
+      case 'play':
+        if (_current != null && !player.playing) await _toggleLocal();
+      case 'pause':
+        if (player.playing) await player.pause();
+      case 'next':
+        await _nextLocal();
+      case 'previous':
+        await _previousLocal();
+      case 'seek':
+        await player.seek(Duration(milliseconds: i('ms')));
+      case 'jump':
+        await _jumpLocal(i('i'));
+      case 'remove':
+        await _removeLocal(i('i'));
+      case 'move':
+        await _moveLocal(i('from'), i('to'));
+      case 'shuffle':
+        await _setShuffleLocal(a['on'] == true);
+      case 'repeat':
+        await _cycleRepeatLocal();
+      case 'add':
+        if (_resolve(a['track']) case final t?) await _addToQueueLocal(t);
+      case 'playNext':
+        if (_resolve(a['track']) case final t?) await _playNextLocal(t);
+      case 'playTracks':
+        final tracks = _resolveAll(a['tracks']);
+        if (tracks.isEmpty) return;
+        final idx = (a['index'] as num?)?.toInt();
+        await _playTracksLocal(tracks, index: idx?.clamp(0, tracks.length - 1), shuffled: a['shuffled'] as bool?, from: a['from'] as String?);
+      case 'transfer':
+        // Another device hands its music over: continue right where it was.
+        final tracks = _resolveAll(a['queue']);
+        if (tracks.isEmpty) return;
+        final idx = i('index').clamp(0, tracks.length - 1);
+        await _playTracksLocal(tracks, index: idx, shuffled: false, from: a['from'] as String?);
+        _shuffleOn = a['shuffle'] == true;
+        await player.seek(Duration(milliseconds: i('positionMs')), index: idx);
+        if (a['playing'] == false) await player.pause();
+        notifyListeners();
+    }
   }
 
   // ----------------------------------------------------------- sleep timer

@@ -13,6 +13,7 @@ import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'collection_screen.dart';
+import 'connect_sheet.dart';
 import 'now_playing.dart';
 import 'profile_screen.dart';
 
@@ -249,6 +250,8 @@ class _TopBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          const ConnectButton(size: 24),
+          const SizedBox(width: 4),
           Pressable(
             onTap: onProfile,
             scale: 0.9,

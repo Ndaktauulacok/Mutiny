@@ -9,6 +9,7 @@ import '../services/library_store.dart';
 import '../services/player_controller.dart';
 import 'effects.dart';
 import 'glass.dart';
+import 'screens/connect_sheet.dart';
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/now_playing.dart';
@@ -336,15 +337,32 @@ class MiniPlayer extends StatelessWidget {
                                 children: [
                                   Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: MText.title.copyWith(fontSize: 14)),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    track.isLive ? 'Live radio' : track.artist,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: MText.caption.copyWith(color: MColors.textSecondary),
-                                  ),
+                                  if (player.remote != null)
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.speaker_group_rounded, size: 13, color: MColors.purple),
+                                        const SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            player.remote!.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: MText.caption.copyWith(color: MColors.purple, fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Text(
+                                      track.isLive ? 'Live radio' : track.artist,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: MText.caption.copyWith(color: MColors.textSecondary),
+                                    ),
                                 ],
                               ),
                             ),
+                            const ConnectButton(size: 20),
                             Consumer<LibraryStore>(
                               builder: (context, lib, _) {
                                 final liked = lib.isLiked(track);
