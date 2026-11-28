@@ -98,10 +98,14 @@ class _ShellState extends State<Shell> {
                     index: _tab,
                     children: [
                       for (var i = 0; i < 4; i++)
-                        HeroControllerScope.none(
-                          child: Navigator(
-                            key: _navKeys[i],
-                            onGenerateRoute: (_) => FadeRoute(_pages[i]),
+                        // Hidden tabs pause their animations.
+                        TickerMode(
+                          enabled: i == _tab,
+                          child: HeroControllerScope.none(
+                            child: Navigator(
+                              key: _navKeys[i],
+                              onGenerateRoute: (_) => FadeRoute(_pages[i]),
+                            ),
                           ),
                         ),
                     ],
@@ -160,6 +164,7 @@ class _TabBar extends StatelessWidget {
       radius: 100,
       blur: 32,
       strength: 1.1,
+      backdrop: true, // floats over scrolling pages
       child: SizedBox(
         height: 62,
         child: LayoutBuilder(builder: (context, c) {
@@ -262,6 +267,7 @@ class MiniPlayer extends StatelessWidget {
                 radius: 22,
                 blur: 32,
                 strength: 1.2,
+                backdrop: true, // floats over scrolling pages
                 child: SizedBox(
                   height: 62,
                   child: Stack(

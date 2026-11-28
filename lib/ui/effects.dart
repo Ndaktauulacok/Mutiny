@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -11,25 +12,35 @@ import 'theme.dart';
 /// Drives a painter with elapsed seconds; [speed] eases toward its target
 /// so motion speeds up / calms down smoothly (e.g. on play / pause).
 mixin _TimeTicker<T extends StatefulWidget> on State<T>, SingleTickerProviderStateMixin<T> {
-  late final Ticker _ticker;
+  Ticker? _ticker;
   final ValueNotifier<double> time = ValueNotifier(0);
   Duration _last = Duration.zero;
   double speed = 1;
   double targetSpeed = 1;
 
   void startTicker() {
-    _ticker = createTicker((elapsed) {
+    _ticker ??= createTicker((elapsed) {
       final dt = (elapsed - _last).inMicroseconds / 1e6;
       _last = elapsed;
       speed += (targetSpeed - speed) * math.min(1, dt * 2.5);
       time.value += dt * speed;
-    })
-      ..start();
+    });
+    if (!_ticker!.isActive) {
+      _last = Duration.zero; // elapsed restarts from zero
+      _ticker!.start();
+    }
   }
+
+  /// Freezes the animation on its current frame (saves battery and GPU).
+  void stopTicker() {
+    if (_ticker?.isActive ?? false) _ticker!.stop();
+  }
+
+  bool get tickerRunning => _ticker?.isActive ?? false;
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _ticker?.dispose();
     time.dispose();
     super.dispose();
   }
@@ -53,12 +64,18 @@ class AuroraBackground extends StatefulWidget {
 
 class _AuroraBackgroundState extends State<AuroraBackground>
     with SingleTickerProviderStateMixin, _TimeTicker {
+  /// On phones the background stays still: a moving full-screen background
+  /// makes every glass panel above it redraw on every frame (the main cause
+  /// of lag). Computers have the power to keep it drifting.
+  static final bool _drift = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
   @override
   void initState() {
     super.initState();
     targetSpeed = 0.35 + widget.energy * 0.8;
     speed = targetSpeed;
-    startTicker();
+    time.value = 14; // a pleasing still frame
+    if (_drift) startTicker();
   }
 
   @override
@@ -167,15 +184,28 @@ class _LiquidOrbState extends State<LiquidOrb> with SingleTickerProviderStateMix
     time.addListener(_ease);
   }
 
+  int _idleFrames = 0;
+
   void _ease() {
     final goal = widget.active ? 1.0 : 0.2;
     energy.value += (goal - energy.value) * 0.03;
+    // Not playing: let it calm down, keep drifting gently for a while, then
+    // freeze so a paused app uses no GPU.
+    if (!widget.active && (energy.value - goal).abs() < 0.01) {
+      if (++_idleFrames > 60 * 8) stopTicker();
+    } else {
+      _idleFrames = 0;
+    }
   }
 
   @override
   void didUpdateWidget(LiquidOrb old) {
     super.didUpdateWidget(old);
     targetSpeed = widget.active ? 1.5 : 0.5;
+    if (widget.active) {
+      _idleFrames = 0;
+      startTicker();
+    }
   }
 
   @override
@@ -225,12 +255,12 @@ class _LiquidOrbPainter extends CustomPainter {
     final deep = Color.lerp(MColors.deep, color, 0.25)!;
     final mid = Color.lerp(MColors.violet, color, 0.5)!;
 
-    // Soft glow under the drop.
-    canvas.drawPath(
-      _blob(c, r * 1.08, t * 0.8, 2.1, amp),
-      Paint()
-        ..color = mid.withValues(alpha: 0.35 + 0.25 * e)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.38),
+    // Soft glow under the drop (a radial gradient: far cheaper than a blur).
+    final glow = mid.withValues(alpha: 0.35 + 0.25 * e);
+    canvas.drawCircle(
+      c,
+      r * 1.6,
+      Paint()..shader = ui.Gradient.radial(c, r * 1.6, [glow, glow.withValues(alpha: glow.a * 0.5), glow.withValues(alpha: 0)], [0.45, 0.68, 1]),
     );
 
     // Droplets that orbit, stretch away and fall back in.
@@ -261,17 +291,15 @@ class _LiquidOrbPainter extends CustomPainter {
     canvas.save();
     canvas.clipPath(body);
     final swirl = c + Offset(math.cos(t * 0.6), math.sin(t * 0.8)) * r * 0.28;
+    final swirlColor = const Color(0xFFF0ABFC).withValues(alpha: 0.18 + 0.12 * e);
     canvas.drawPath(
-      _blob(swirl, r * 0.55, -t * 1.3, 4.0, amp * 1.4),
-      Paint()
-        ..color = const Color(0xFFF0ABFC).withValues(alpha: 0.18 + 0.12 * e)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.16),
+      _blob(swirl, r * 0.62, -t * 1.3, 4.0, amp * 1.4),
+      Paint()..shader = ui.Gradient.radial(swirl, r * 0.62, [swirlColor, swirlColor.withValues(alpha: 0)], [0.3, 1]),
     );
+    final shade = c + Offset(r * 0.3, r * 0.45);
     canvas.drawPath(
-      _blob(c + Offset(r * 0.3, r * 0.45), r * 0.7, t * 0.9, 1.3, amp),
-      Paint()
-        ..color = deep.withValues(alpha: 0.55)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.22),
+      _blob(shade, r * 0.8, t * 0.9, 1.3, amp),
+      Paint()..shader = ui.Gradient.radial(shade, r * 0.8, [deep.withValues(alpha: 0.55), deep.withValues(alpha: 0)], [0.35, 1]),
     );
     canvas.restore();
 
@@ -383,12 +411,19 @@ class _LiquidCoverPainter extends CustomPainter {
     for (var i = 0; i < 3; i++) {
       final center = Offset(w * (0.15 + rnd.nextDouble() * 0.75), h * (0.1 + rnd.nextDouble() * 0.7));
       final radius = w * (0.22 + rnd.nextDouble() * 0.2);
-      canvas.drawOval(
-        Rect.fromCenter(center: center, width: radius * 2, height: radius * (1.4 + rnd.nextDouble() * 0.8)),
-        Paint()
-          ..color = palette[i].withValues(alpha: i == 1 ? 0.45 : 0.75)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, w * 0.12),
+      final stretch = (1.4 + rnd.nextDouble() * 0.8) / 2;
+      final col = palette[i].withValues(alpha: i == 1 ? 0.45 : 0.75);
+      // Soft blob drawn with a radial gradient (a blur filter is slow on phones).
+      final soft = radius + w * 0.2;
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.scale(1, stretch);
+      canvas.drawCircle(
+        Offset.zero,
+        soft,
+        Paint()..shader = ui.Gradient.radial(Offset.zero, soft, [col, col.withValues(alpha: col.a * 0.55), col.withValues(alpha: 0)], [0, 0.55, 1]),
       );
+      canvas.restore();
     }
     // Curved glass sheen across the top.
     final sheen = Path()

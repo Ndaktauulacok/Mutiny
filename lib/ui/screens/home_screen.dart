@@ -65,11 +65,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Six genre mixes that rotate every day.
-  List<String> get _dailyGenres {
+  late final List<String> _dailyGenres = () {
     final day = DateTime.now().difference(DateTime(2026)).inDays;
     final list = [...AudiusApi.genres]..shuffle(math.Random(day));
     return list.take(6).toList();
-  }
+  }();
 
   Future<void> _playFlow() async {
     final player = context.read<PlayerController>();
@@ -85,12 +85,26 @@ class _HomeScreenState extends State<HomeScreen> {
       final seen = <String>{};
       final merged = [for (final l in lists) ...l].where((t) => seen.add(t.id)).toList()..shuffle();
       if (merged.isEmpty) throw Exception();
+      if (!mounted) return;
+      context.read<LibraryStore>().markPlayedFrom(
+            PlayContext(type: PlayContextType.flow, id: 'flow', title: 'Flow', subtitle: _mood.label, data: {'mood': _mood.name}),
+          );
       await player.playTracks(merged, from: 'Flow');
     } catch (_) {
       if (mounted) toast(context, "Couldn't start Flow. Check your connection");
     } finally {
       if (mounted) setState(() => _flowLoading = false);
     }
+  }
+
+  void _flowFromRecents(String? mood) {
+    final m = FlowMood.values.where((f) => f.name == mood).firstOrNull;
+    if (m != null && m != _mood) {
+      setState(() => _mood = m);
+      final player = context.read<PlayerController>();
+      if (player.contextName == 'Flow') player.contextName = null;
+    }
+    _playFlow();
   }
 
   void _tuneFlow() {
@@ -147,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _TopBar(onProfile: () => Navigator.of(context).push(FadeRoute(const ProfileScreen()))),
           _FlowHero(mood: _mood, loading: _flowLoading, onPlay: _playFlow, onTune: _tuneFlow),
-          const _JumpBackIn(),
+          _JumpBackIn(onFlow: _flowFromRecents),
 
           const SectionHeader('Daily', accentWord: 'mixes'),
           HorizontalList(
@@ -165,6 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   subtitle: '$g · fresh today',
                   cover: LiquidCover(index: i + DateTime.now().day, color: genreColor(g), label: '0${i + 1}'),
                   load: () async => (await _audius.trending(genre: g, limit: 40))..shuffle(math.Random(DateTime.now().day)),
+                  playContext: PlayContext(type: PlayContextType.mix, id: g, title: 'Daily Mix ${i + 1}', subtitle: g, data: {'genre': g}),
                 ))),
               );
             },
@@ -371,68 +386,180 @@ class _FlowHero extends StatelessWidget {
   }
 }
 
-/// Spotify-style 2-column grid of what you played lately.
+/// Spotify-style 2-column grid of the playlists, artists, mixes and
+/// stations you played from lately (not single songs). Topped up with your
+/// own playlists so it is never empty.
 class _JumpBackIn extends StatelessWidget {
-  const _JumpBackIn();
+  const _JumpBackIn({required this.onFlow});
+
+  final void Function(String? mood) onFlow;
+
+  List<PlayContext> _items(LibraryStore lib) {
+    final out = <PlayContext>[];
+    final seen = <String>{};
+    void add(PlayContext c) {
+      if (out.length < 6 && seen.add(c.key)) out.add(c);
+    }
+
+    for (final c in lib.recentContexts) {
+      if (c.type == PlayContextType.playlist && lib.playlistById(c.id) == null) continue; // deleted
+      add(c);
+    }
+    if (lib.liked.isNotEmpty) add(CollectionScreen.liked().playContext!);
+    final mine = [...lib.playlists]..sort((a, b) => b.updated.compareTo(a.updated));
+    for (final p in mine) {
+      add(PlayContext(type: PlayContextType.playlist, id: p.id, title: p.name, subtitle: 'Playlist'));
+    }
+    if (lib.localTracks.isNotEmpty) add(CollectionScreen.mySongsContext());
+    for (final c in lib.savedPlaylists) {
+      add(CollectionScreen.remote(c).playContext!);
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final recent = context.watch<LibraryStore>().recent.take(6).toList();
-    if (recent.isEmpty) return const SizedBox.shrink();
-    final player = context.read<PlayerController>();
+    final lib = context.watch<LibraryStore>();
+    final items = _items(lib);
+    if (items.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          'Listening',
-          accentWord: 'lately',
-          action: 'See all',
-          onAction: () => Navigator.of(context).push(FadeRoute(CollectionScreen.recent())),
-        ),
+        const SectionHeader('Listening', accentWord: 'lately'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             padding: EdgeInsets.zero,
-            itemCount: recent.length,
+            itemCount: items.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
               mainAxisExtent: 56,
             ),
-            itemBuilder: (_, i) {
-              final t = recent[i];
-              final isCurrent = context.watch<PlayerController>().current == t;
-              return Pressable(
-                onTap: () => player.playTracks(recent, index: i, from: 'Recently played'),
-                onLongPress: () => showTrackMenu(context, t),
-                child: Glass(
-                  radius: 12,
-                  blur: 14,
-                  child: Row(
-                    children: [
-                      Artwork(url: t.artworkUrl, size: 56, radius: 0, fit: t.isLive ? BoxFit.contain : BoxFit.cover),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          t.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: MText.title.copyWith(fontSize: 13, color: isCurrent ? MColors.purple : MColors.text),
-                        ),
-                      ),
-                      if (isCurrent) const Padding(padding: EdgeInsets.only(right: 10), child: EqualizerBars(size: 12)),
-                      const SizedBox(width: 6),
-                    ],
-                  ),
-                ),
-              );
-            },
+            itemBuilder: (_, i) => _ContextTile(
+              item: items[i],
+              inRecents: lib.recentContexts.contains(items[i]),
+              onFlow: onFlow,
+            ),
           ),
         ),
       ],
     );
   }
+}
+
+class _ContextTile extends StatelessWidget {
+  const _ContextTile({required this.item, required this.inRecents, required this.onFlow});
+
+  final PlayContext item;
+  final bool inRecents;
+  final void Function(String? mood) onFlow;
+
+  void _open(BuildContext context) {
+    final lib = context.read<LibraryStore>();
+    final nav = Navigator.of(context);
+    final d = item.data;
+    switch (item.type) {
+      case PlayContextType.playlist:
+        final p = lib.playlistById(item.id);
+        if (p != null) nav.push(FadeRoute(CollectionScreen.userPlaylist(p)));
+      case PlayContextType.liked:
+        nav.push(FadeRoute(CollectionScreen.liked()));
+      case PlayContextType.mySongs:
+        nav.push(FadeRoute(CollectionScreen.local()));
+      case PlayContextType.remote:
+        nav.push(FadeRoute(CollectionScreen.remote(Collection.fromJson(d))));
+      case PlayContextType.artist:
+        nav.push(FadeRoute(CollectionScreen.artist(artist: Artist.fromJson(d))));
+      case PlayContextType.genre:
+        nav.push(FadeRoute(CollectionScreen.genre(item.id, index: d['index'] as int?)));
+      case PlayContextType.mix:
+        final g = item.id;
+        nav.push(FadeRoute(CollectionScreen.mix(
+          title: item.title,
+          subtitle: 'Mix · $g',
+          cover: LiquidCover(index: g.hashCode.abs() % 50, color: genreColor(g), label: g),
+          load: () async => (await AudiusApi().trending(genre: g, limit: 40))..shuffle(),
+          playContext: item,
+        )));
+      case PlayContextType.flow:
+        onFlow(d['mood'] as String?);
+      case PlayContextType.station:
+        context.read<PlayerController>().playTrack(Track.fromJson(d), from: 'Radio');
+    }
+  }
+
+  /// Whether music is currently playing from this item.
+  bool _isPlaying(PlayerController player) {
+    if (!player.hasTrack) return false;
+    if (item.type == PlayContextType.station) return player.current?.id == item.id;
+    return player.contextName == item.title;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final player = context.watch<PlayerController>();
+    final current = _isPlaying(player);
+    return Pressable(
+      onTap: () => _open(context),
+      onLongPress: inRecents
+          ? () {
+              context.read<LibraryStore>().removeRecentContext(item);
+              toast(context, 'Removed from Listening lately');
+            }
+          : null,
+      child: Glass(
+        radius: 10,
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+              child: SizedBox(width: 56, height: 56, child: _ContextCover(item: item)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                item.type == PlayContextType.playlist
+                    ? context.select<LibraryStore, String>((l) => l.playlistById(item.id)?.name ?? item.title)
+                    : item.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: MText.title.copyWith(fontSize: 13, color: current ? MColors.purple : MColors.text),
+              ),
+            ),
+            if (current) EqualizerBars(size: 12, playing: player.playing),
+            const SizedBox(width: 10),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContextCover extends StatelessWidget {
+  const _ContextCover({required this.item});
+  final PlayContext item;
+
+  static Widget _gradient(IconData icon, List<Color> colors) => DecoratedBox(
+        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomLeft, end: Alignment.topRight, colors: colors)),
+        child: Center(child: Icon(icon, color: Colors.white, size: 22)),
+      );
+
+  @override
+  Widget build(BuildContext context) => switch (item.type) {
+        PlayContextType.playlist => switch (context.select<LibraryStore, UserPlaylist?>((l) => l.playlistById(item.id))) {
+            final p? => PlaylistCover(playlist: p, radius: 0),
+            null => _gradient(Icons.queue_music_rounded, const [Color(0xFF2B1155), Color(0xFF8A3FFC)]),
+          },
+        PlayContextType.liked => _gradient(Icons.favorite_rounded, const [Color(0xFF4C1D95), Color(0xFFC4B5FD)]),
+        PlayContextType.mySongs => _gradient(Icons.library_music_rounded, const [Color(0xFF312E81), Color(0xFF7C3AED)]),
+        PlayContextType.flow => _gradient(Icons.waves_rounded, const [Color(0xFF2B1155), Color(0xFFA259FF)]),
+        PlayContextType.genre || PlayContextType.mix => _gradient(Icons.graphic_eq_rounded, [Color.lerp(genreColor(item.id), Colors.black, 0.5)!, genreColor(item.id)]),
+        PlayContextType.station => Artwork(url: item.artworkUrl, radius: 0, size: 56, icon: Icons.radio_rounded, fit: BoxFit.contain),
+        PlayContextType.artist => Artwork(url: item.artworkUrl, radius: 0, size: 56, icon: Icons.person_rounded),
+        PlayContextType.remote => Artwork(url: item.artworkUrl, radius: 0, size: 56, icon: Icons.queue_music_rounded),
+      };
 }

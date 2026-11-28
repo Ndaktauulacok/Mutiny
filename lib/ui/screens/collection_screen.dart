@@ -31,6 +31,7 @@ class CollectionScreen extends StatefulWidget {
     this.playlistId,
     this.artist,
     this.collection,
+    this.playContext,
   });
 
   factory CollectionScreen.remote(Collection c) => CollectionScreen._(
@@ -40,6 +41,14 @@ class CollectionScreen extends StatefulWidget {
         artworkUrl: c.artworkUrl,
         load: () => AudiusApi().playlistTracks(c.id),
         collection: c,
+        playContext: PlayContext(
+          type: PlayContextType.remote,
+          id: c.id,
+          title: c.title,
+          subtitle: c.subtitle.isEmpty ? 'Playlist' : 'Playlist · ${c.subtitle}',
+          artworkUrl: c.artworkUrl,
+          data: c.toJson(),
+        ),
       );
 
   factory CollectionScreen.artist({required Artist artist}) => CollectionScreen._(
@@ -49,6 +58,14 @@ class CollectionScreen extends StatefulWidget {
         artworkUrl: artist.avatarUrl,
         load: () => AudiusApi().artistTracks(artist.id),
         artist: artist,
+        playContext: PlayContext(
+          type: PlayContextType.artist,
+          id: artist.id,
+          title: artist.name,
+          subtitle: 'Artist',
+          artworkUrl: artist.avatarUrl,
+          data: artist.toJson(),
+        ),
       );
 
   factory CollectionScreen.genre(String genre, {int? index}) => CollectionScreen._(
@@ -57,23 +74,35 @@ class CollectionScreen extends StatefulWidget {
         subtitle: 'Trending this week',
         cover: LiquidCover(index: index ?? genre.hashCode.abs() % 50, color: genreColor(genre), label: genre),
         load: () => AudiusApi().trending(genre: genre, limit: 50),
+        playContext: PlayContext(type: PlayContextType.genre, id: genre, title: genre, subtitle: 'Genre', data: {'index': index}),
       );
 
-  factory CollectionScreen.mix({required String title, required String subtitle, required Widget cover, required Future<List<Track>> Function() load}) =>
-      CollectionScreen._(kind: CollectionKind.mix, title: title, subtitle: subtitle, cover: cover, load: load);
+  factory CollectionScreen.mix({
+    required String title,
+    required String subtitle,
+    required Widget cover,
+    required Future<List<Track>> Function() load,
+    PlayContext? playContext,
+  }) =>
+      CollectionScreen._(kind: CollectionKind.mix, title: title, subtitle: subtitle, cover: cover, load: load, playContext: playContext);
 
-  factory CollectionScreen.liked() => const CollectionScreen._(
+  factory CollectionScreen.liked() => CollectionScreen._(
         kind: CollectionKind.liked,
         title: 'Liked Songs',
-        cover: _GradientCover(icon: Icons.favorite_rounded),
+        cover: const _GradientCover(icon: Icons.favorite_rounded),
+        playContext: PlayContext(type: PlayContextType.liked, id: 'liked', title: 'Liked Songs', subtitle: 'Playlist'),
       );
 
-  factory CollectionScreen.local() => const CollectionScreen._(
+  factory CollectionScreen.local() => CollectionScreen._(
         kind: CollectionKind.local,
         title: 'My songs',
         subtitle: 'Only you can see these',
-        cover: _GradientCover(icon: Icons.library_music_rounded, colors: [Color(0xFF312E81), Color(0xFF7C3AED)]),
+        cover: const _GradientCover(icon: Icons.library_music_rounded, colors: [Color(0xFF312E81), Color(0xFF7C3AED)]),
+        playContext: mySongsContext(),
       );
+
+  static PlayContext mySongsContext() =>
+      PlayContext(type: PlayContextType.mySongs, id: 'mine', title: 'My songs', subtitle: 'Only you');
 
   factory CollectionScreen.recent() => const CollectionScreen._(
         kind: CollectionKind.recent,
@@ -85,6 +114,7 @@ class CollectionScreen extends StatefulWidget {
         kind: CollectionKind.userPlaylist,
         title: p.name,
         playlistId: p.id,
+        playContext: PlayContext(type: PlayContextType.playlist, id: p.id, title: p.name, subtitle: 'Playlist'),
       );
 
   final CollectionKind kind;
@@ -100,6 +130,9 @@ class CollectionScreen extends StatefulWidget {
 
   /// Set on Audius playlists (Save to Library button).
   final Collection? collection;
+
+  /// Remembered on Home ("Listening lately") when played from this page.
+  final PlayContext? playContext;
 
   @override
   State<CollectionScreen> createState() => _CollectionScreenState();
@@ -123,6 +156,15 @@ class _CollectionScreenState extends State<CollectionScreen> {
   }
 
   void _retry() => setState(() => _future = widget.load?.call());
+
+  void _markPlayed(LibraryStore lib) {
+    final c = widget.playContext;
+    if (c == null) return;
+    // A user playlist may have been renamed since this page opened.
+    final p = widget.playlistId == null ? null : lib.playlistById(widget.playlistId!);
+    lib.markPlayedFrom(p == null ? PlayContext(type: c.type, id: c.id, title: c.title, subtitle: c.subtitle, artworkUrl: c.artworkUrl, data: c.data)
+        : PlayContext(type: c.type, id: c.id, title: p.name, subtitle: 'Playlist'));
+  }
 
   List<Track>? _liveTracks(LibraryStore lib) => switch (widget.kind) {
         CollectionKind.liked => lib.liked,
@@ -190,7 +232,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
           track: shown[i],
           index: i,
           playlist: playlist,
-          onTap: () => player.playTracks(shown, index: i, from: title),
+          onTap: () {
+            _markPlayed(lib);
+            player.playTracks(shown, index: i, from: title);
+          },
           trailing: canReorder
               ? ReorderableDragStartListener(
                   index: i,
@@ -271,9 +316,15 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      PillButton(label: 'Play', icon: Icons.play_arrow_rounded, filled: true, onTap: () => player.playTracks(tracks, from: title)),
+                      PillButton(label: 'Play', icon: Icons.play_arrow_rounded, filled: true, onTap: () {
+                        _markPlayed(lib);
+                        player.playTracks(tracks, from: title);
+                      }),
                       const SizedBox(width: 12),
-                      PillButton(label: 'Shuffle', icon: Icons.shuffle_rounded, onTap: () => player.playTracks(tracks, shuffled: true, from: title)),
+                      PillButton(label: 'Shuffle', icon: Icons.shuffle_rounded, onTap: () {
+                        _markPlayed(lib);
+                        player.playTracks(tracks, shuffled: true, from: title);
+                      }),
                     ],
                   ),
                 ],

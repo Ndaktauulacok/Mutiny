@@ -24,6 +24,7 @@ class LibraryStore extends ChangeNotifier {
   static const _kSavedPlaylists = 'mutiny.savedPlaylists';
   static const _kStats = 'mutiny.stats';
   static const _kLyrics = 'mutiny.lyrics';
+  static const _kContexts = 'mutiny.contexts';
 
   SharedPreferences? _prefs;
 
@@ -33,6 +34,9 @@ class LibraryStore extends ChangeNotifier {
   final List<Track> localTracks = [];
   final List<Track> recent = [];
   final List<String> recentSearches = [];
+
+  /// Playlists, artists, mixes… the user played from, newest first.
+  final List<PlayContext> recentContexts = [];
   final List<Artist> followedArtists = [];
   final List<Collection> savedPlaylists = [];
   final Map<String, PlayStat> stats = {};
@@ -48,6 +52,7 @@ class LibraryStore extends ChangeNotifier {
     localTracks.addAll(_readTracks(_kLocal));
     recent.addAll(_readTracks(_kRecent));
     recentSearches.addAll(_prefs!.getStringList(_kSearches) ?? const []);
+    recentContexts.addAll(_readContexts(_prefs!.getString(_kContexts)));
     profile = _readJson(_kProfile, Profile.fromJson) ?? Profile(name: 'Listener');
     followedArtists.addAll(_readList(_kArtists, Artist.fromJson));
     savedPlaylists.addAll(_readList(_kSavedPlaylists, Collection.fromJson));
@@ -193,6 +198,8 @@ class LibraryStore extends ChangeNotifier {
     playlists.remove(p);
     _deleteImage(p.coverPath);
     _savePlaylists();
+    recentContexts.removeWhere((c) => c.type == PlayContextType.playlist && c.id == p.id);
+    _writeContexts();
     notifyListeners();
   }
 
@@ -342,6 +349,7 @@ class LibraryStore extends ChangeNotifier {
       'saved_playlist/all': {'items': savedPlaylists.map((c) => c.toJson()).toList()},
       'station/all': {'items': stations.map((t) => t.toJson()).toList()},
       'recent/all': {'items': recent.take(30).map((t) => t.toJson()).toList()},
+      'context/all': {'items': recentContexts.map((c) => c.toJson()).toList()},
     };
     for (final p in playlists) {
       out['playlist/${p.id}'] = p.toJson();
@@ -392,6 +400,12 @@ class LibraryStore extends ChangeNotifier {
           ..clear()
           ..addAll(items(Track.fromJson));
         _writeTracks(_kRecent, recent);
+      case 'context':
+        final list = _readContexts(jsonEncode((data?['items'] as List?) ?? const []))..sort((a, b) => b.at.compareTo(a.at));
+        recentContexts
+          ..clear()
+          ..addAll(list.take(maxContexts));
+        _writeContexts();
       case 'playlist':
         final i = playlists.indexWhere((p) => p.id == id);
         if (data == null) {
@@ -440,12 +454,13 @@ class LibraryStore extends ChangeNotifier {
     localTracks.clear();
     recent.clear();
     recentSearches.clear();
+    recentContexts.clear();
     followedArtists.clear();
     savedPlaylists.clear();
     stats.clear();
     ownLyrics.clear();
     profile = Profile(name: 'Listener');
-    for (final k in [_kLiked, _kPlaylists, _kStations, _kLocal, _kRecent, _kSearches, _kProfile, _kArtists, _kSavedPlaylists, _kStats, _kLyrics]) {
+    for (final k in [_kLiked, _kPlaylists, _kStations, _kLocal, _kRecent, _kSearches, _kProfile, _kArtists, _kSavedPlaylists, _kStats, _kLyrics, _kContexts]) {
       await _prefs?.remove(k);
     }
     notifyListeners();
@@ -511,6 +526,37 @@ class LibraryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  static const maxContexts = 20;
+
+  /// Remembers that the user started playing from [c] (a playlist, artist…).
+  void markPlayedFrom(PlayContext c) {
+    recentContexts.remove(c);
+    recentContexts.insert(0, c);
+    if (recentContexts.length > maxContexts) recentContexts.removeRange(maxContexts, recentContexts.length);
+    _writeContexts();
+    notifyListeners();
+  }
+
+  void removeRecentContext(PlayContext c) {
+    if (recentContexts.remove(c)) {
+      _writeContexts();
+      notifyListeners();
+    }
+  }
+
+  List<PlayContext> _readContexts(String? raw) {
+    if (raw == null) return [];
+    try {
+      return [
+        for (final e in jsonDecode(raw) as List) ?PlayContext.fromJson(Map<String, dynamic>.from(e as Map)),
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  void _writeContexts() => _prefs?.setString(_kContexts, jsonEncode(recentContexts.map((c) => c.toJson()).toList()));
+
   void addSearch(String q) {
     final query = q.trim();
     if (query.isEmpty) return;
@@ -530,6 +576,8 @@ class LibraryStore extends ChangeNotifier {
   void clearHistory() {
     recent.clear();
     recentSearches.clear();
+    recentContexts.clear();
+    _writeContexts();
     _writeTracks(_kRecent, recent);
     _prefs?.setStringList(_kSearches, recentSearches);
     notifyListeners();

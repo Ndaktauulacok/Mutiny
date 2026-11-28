@@ -287,3 +287,58 @@ String compactNumber(int n) {
   if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
   return '$n';
 }
+
+/// Where the user last started playing from, shown on Home like Spotify's
+/// "recents" grid: a playlist, Liked Songs, an artist, a mix or a station.
+enum PlayContextType { playlist, liked, mySongs, remote, artist, genre, mix, flow, station }
+
+class PlayContext {
+  PlayContext({required this.type, required this.id, required this.title, this.subtitle = '', this.artworkUrl, this.data = const {}, DateTime? at})
+      : at = at ?? DateTime.now();
+
+  final PlayContextType type;
+
+  /// Playlist id, artist id, genre name, … (unique within [type]).
+  final String id;
+  final String title;
+  final String subtitle;
+  final String? artworkUrl;
+
+  /// What is needed to open it again (the Audius playlist, artist, station…).
+  final Map<String, dynamic> data;
+  final DateTime at;
+
+  String get key => '${type.name}:$id';
+
+  @override
+  bool operator ==(Object other) => other is PlayContext && other.key == key;
+
+  @override
+  int get hashCode => key.hashCode;
+
+  Map<String, dynamic> toJson() => {
+        'source': 'ctx', // lets the sync merge tell items apart
+        'id': key,
+        'type': type.name,
+        'cid': id,
+        'title': title,
+        'subtitle': subtitle,
+        'art': artworkUrl,
+        'data': data,
+        'at': at.toIso8601String(),
+      };
+
+  static PlayContext? fromJson(Map<String, dynamic> j) {
+    final type = PlayContextType.values.where((t) => t.name == j['type']).firstOrNull;
+    if (type == null) return null;
+    return PlayContext(
+      type: type,
+      id: j['cid'] as String? ?? '',
+      title: j['title'] as String? ?? '',
+      subtitle: j['subtitle'] as String? ?? '',
+      artworkUrl: j['art'] as String?,
+      data: Map<String, dynamic>.from((j['data'] as Map?) ?? const {}),
+      at: DateTime.tryParse(j['at'] as String? ?? ''),
+    );
+  }
+}

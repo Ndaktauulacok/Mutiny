@@ -148,7 +148,20 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  Future<void> playTrack(Track t, {String? from}) => playTracks([t], from: from);
+  Future<void> playTrack(Track t, {String? from}) {
+    if (t.source == TrackSource.radio) {
+      // A radio station counts as something to jump back into, like a playlist.
+      library.markPlayedFrom(PlayContext(
+        type: PlayContextType.station,
+        id: t.id,
+        title: t.title,
+        subtitle: 'Radio',
+        artworkUrl: t.artworkUrl,
+        data: t.toJson(),
+      ));
+    }
+    return playTracks([t], from: from);
+  }
 
   /// Spotify-style song radio: this song, then similar music
   /// (same artist + trending in the same genre), shuffled.

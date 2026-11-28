@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -126,10 +126,9 @@ class _Backdrop extends StatelessWidget {
             child: Opacity(
               key: ValueKey(track.key),
               opacity: 0.55,
-              child: ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: 70, sigmaY: 70, tileMode: TileMode.decal),
-                child: Transform.scale(scale: 1.4, child: Artwork(url: track.artworkUrl, radius: 0)),
-              ),
+              // A tiny copy of the cover stretched over the screen looks
+              // just like a heavy blur, without redrawing a blur every frame.
+              child: Transform.scale(scale: 1.4, child: _SoftCover(url: track.artworkUrl!)),
             ),
           ),
         const DecoratedBox(
@@ -651,6 +650,24 @@ class _QueueView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The cover decoded at 20 px and smoothly scaled up: a free "blur".
+class _SoftCover extends StatelessWidget {
+  const _SoftCover({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final ImageProvider base = url.startsWith('http') ? NetworkImage(url) : FileImage(File(url));
+    return Image(
+      image: ResizeImage(base, width: 20, height: 20, policy: ResizeImagePolicy.fit),
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
+      gaplessPlayback: true,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
     );
   }
 }

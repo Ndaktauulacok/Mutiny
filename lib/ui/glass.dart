@@ -15,8 +15,14 @@ const _vibrancy = ui.ColorFilter.matrix(<double>[
   0, 0, 0, 1, 0,
 ]);
 
-/// iPhone-style liquid glass: clear and see-through. Only a light blur, an
-/// almost invisible fill, and bright refracting edges that catch the light.
+/// iPhone-style liquid glass: clear and see-through, with bright refracting
+/// edges that catch the light.
+///
+/// Real background blur ([backdrop]) is expensive on phones: every blurred
+/// panel is redrawn on every frame while anything behind it moves. It is
+/// only switched on for panels that float over scrolling content (tab bar,
+/// mini player, sheets). Everywhere else the glass is drawn without it,
+/// which looks the same over Mutiny's dark background.
 class Glass extends StatelessWidget {
   const Glass({
     super.key,
@@ -27,6 +33,7 @@ class Glass extends StatelessWidget {
     this.tint,
     this.strength = 1,
     this.shape = BoxShape.rectangle,
+    this.backdrop = false,
   });
 
   final Widget child;
@@ -41,9 +48,13 @@ class Glass extends StatelessWidget {
   final double strength;
   final BoxShape shape;
 
+  /// Blur what is behind the glass (costly; see the class docs).
+  final bool backdrop;
+
   @override
   Widget build(BuildContext context) {
     final borderRadius = shape == BoxShape.circle ? null : BorderRadius.circular(radius);
+    if (!backdrop) return _flat(borderRadius);
     final s = strength.clamp(0.0, 2.0);
     final sigma = (blur * 0.2).clamp(1.5, 10.0);
     final fill = BoxDecoration(
@@ -78,6 +89,32 @@ class Glass extends StatelessWidget {
         ? ClipOval(child: filter)
         : ClipRRect(borderRadius: borderRadius!, child: filter);
   }
+
+  /// Glass without background blur: a faint fill plus the same bright edges.
+  Widget _flat(BorderRadius? borderRadius) {
+    final s = strength.clamp(0.0, 2.0);
+    final t = tint ?? const Color(0xFFFFFFFF);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: shape,
+        borderRadius: borderRadius,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(const Color(0x00FFFFFF), t, 0.11 * s)!,
+            Color.lerp(const Color(0x00FFFFFF), t, 0.045 * s)!,
+            Color.lerp(const Color(0x00FFFFFF), t, 0.07 * s)!,
+          ],
+          stops: const [0, 0.5, 1],
+        ),
+      ),
+      child: CustomPaint(
+        foregroundPainter: _GlassEdgePainter(radius: radius, circle: shape == BoxShape.circle),
+        child: padding == null ? child : Padding(padding: padding!, child: child),
+      ),
+    );
+  }
 }
 
 /// The look of thick clear glass: light bending at the edges (a soft bright
@@ -100,19 +137,26 @@ class _GlassEdgePainter extends CustomPainter {
     canvas.clipRRect(rr);
 
     // Refraction band: bright inside the rim, fading toward the middle.
-    canvas.drawRRect(
-      rr.deflate(edge / 2),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = edge
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, edge * 0.6)
-        ..shader = ui.Gradient.linear(
-          rect.topLeft,
-          rect.bottomRight,
-          [const Color(0x40FFFFFF), const Color(0x0AFFFFFF), const Color(0x08FFFFFF), const Color(0x30FFFFFF)],
-          [0, 0.4, 0.6, 1],
-        ),
-    );
+    // Two soft strokes instead of a blur filter (much cheaper on phones).
+    for (final (inset, width, alpha) in [(edge * 0.25, edge * 0.5, 1.0), (edge * 0.7, edge * 0.5, 0.45)]) {
+      canvas.drawRRect(
+        rr.deflate(inset),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..shader = ui.Gradient.linear(
+            rect.topLeft,
+            rect.bottomRight,
+            [
+              Color.fromRGBO(255, 255, 255, 0.2 * alpha),
+              Color.fromRGBO(255, 255, 255, 0.04 * alpha),
+              Color.fromRGBO(255, 255, 255, 0.03 * alpha),
+              Color.fromRGBO(255, 255, 255, 0.15 * alpha),
+            ],
+            const [0, 0.4, 0.6, 1],
+          ),
+      );
+    }
 
     // Small curved highlight near the top, like a reflection on a lens.
     final hl = Rect.fromLTWH(size.width * 0.06, 1.5, size.width * 0.88, (size.height * 0.28).clamp(4.0, 26.0));
@@ -353,26 +397,42 @@ class Artwork extends StatelessWidget {
       ),
     );
     final isFile = url != null && url!.isNotEmpty && !url!.startsWith('http');
-    Widget img = url == null || url!.isEmpty
-        ? placeholder
-        : isFile
-            ? (kIsWeb || !File(url!).existsSync()
-                ? placeholder
-                : Image.file(File(url!), fit: fit, gaplessPlayback: true, errorBuilder: (_, _, _) => placeholder))
-            : Image.network(
-            url!,
-            fit: fit,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (_, _, _) => placeholder,
-            frameBuilder: (_, child, frame, sync) => sync
-                ? child
-                : AnimatedOpacity(
-                    opacity: frame == null ? 0 : 1,
-                    duration: const Duration(milliseconds: 260),
-                    child: frame == null ? placeholder : child,
-                  ),
-          );
+    // Decode pictures at the size they are shown, not at full size (a
+    // 1000×1000 cover decoded for a 56 px tile wastes memory and makes
+    // scrolling stutter on phones).
+    Widget picture(double? box) {
+      final dpr = MediaQuery.devicePixelRatioOf(context);
+      final px = box == null || !box.isFinite ? null : (box * dpr).round().clamp(48, 1400);
+      if (url == null || url!.isEmpty || (isFile && kIsWeb)) return placeholder;
+      return isFile
+          ? Image.file(
+              File(url!),
+              fit: fit,
+              cacheWidth: px,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, _, _) => placeholder,
+            )
+          : Image.network(
+              url!,
+              fit: fit,
+              cacheWidth: px,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, _, _) => placeholder,
+              frameBuilder: (_, child, frame, sync) => sync
+                  ? child
+                  : AnimatedOpacity(
+                      opacity: frame == null ? 0 : 1,
+                      duration: const Duration(milliseconds: 260),
+                      child: frame == null ? placeholder : child,
+                    ),
+            );
+    }
+
+    Widget img = size != null
+        ? picture(size)
+        : LayoutBuilder(builder: (_, c) => picture(c.hasBoundedWidth ? c.maxWidth : (c.hasBoundedHeight ? c.maxHeight : null)));
     if (fit == BoxFit.contain && url != null) {
       img = ColoredBox(color: const Color(0xFF1A0F33), child: Padding(padding: const EdgeInsets.all(6), child: img));
     }
@@ -427,6 +487,7 @@ Future<T?> showGlassSheet<T>(BuildContext context, {required WidgetBuilder build
           radius: 30,
           blur: 40,
           strength: 1.3,
+          backdrop: true,
           tint: const Color(0xFF8B5CF6),
           child: DecoratedBox(
             decoration: const BoxDecoration(color: Color(0xB3121014)),

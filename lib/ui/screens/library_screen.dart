@@ -308,7 +308,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
             itemCount: lib.localTracks.length,
             itemBuilder: (_, i) => TrackTile(
               track: lib.localTracks[i],
-              onTap: () => player.playTracks(lib.localTracks, index: i, from: 'My songs'),
+              onTap: () {
+                lib.markPlayedFrom(CollectionScreen.mySongsContext());
+                player.playTracks(lib.localTracks, index: i, from: 'My songs');
+              },
             ),
           ),
           if (lib.localTracks.isEmpty)

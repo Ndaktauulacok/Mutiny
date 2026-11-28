@@ -8,7 +8,7 @@ import 'dart:convert';
 class SyncMerge {
   /// Items that are whole lists; when both sides changed they are combined
   /// instead of one side winning, so nothing liked on one device is lost.
-  static const listKinds = {'liked', 'artist', 'saved_playlist', 'station', 'recent'};
+  static const listKinds = {'liked', 'artist', 'saved_playlist', 'station', 'recent', 'context'};
 
   static String kindOf(String key) => key.substring(0, key.indexOf('/'));
 
