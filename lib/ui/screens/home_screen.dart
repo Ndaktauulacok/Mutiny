@@ -13,6 +13,7 @@ import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'collection_screen.dart';
+import 'now_playing.dart';
 import 'profile_screen.dart';
 
 /// Moods the user can tune Flow (the endless mix) to.
@@ -44,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Track>> _underground;
   late Future<List<Track>> _stations;
   FlowMood _mood = FlowMood.everything;
-  bool _flowLoading = false;
 
   @override
   void initState() {
@@ -77,7 +77,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await player.togglePlay();
       return;
     }
-    setState(() => _flowLoading = true);
     try {
       final lists = _mood == FlowMood.discover
           ? [await _audius.undergroundTrending(limit: 60)]
@@ -92,8 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await player.playTracks(merged, from: 'Flow');
     } catch (_) {
       if (mounted) toast(context, "Couldn't start Flow. Check your connection");
-    } finally {
-      if (mounted) setState(() => _flowLoading = false);
     }
   }
 
@@ -105,46 +102,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (player.contextName == 'Flow') player.contextName = null;
     }
     _playFlow();
-  }
-
-  void _tuneFlow() {
-    showGlassSheet(
-      context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Tune your Flow', style: MText.h2),
-              const SizedBox(height: 6),
-              const Text('Pick a mood for your endless mix', style: MText.body),
-              const SizedBox(height: 20),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 10,
-                children: [
-                  for (final m in FlowMood.values)
-                    GlassChip(
-                      label: m.label,
-                      selected: m == _mood,
-                      onTap: () {
-                        setSheet(() {});
-                        setState(() => _mood = m);
-                        final player = context.read<PlayerController>();
-                        if (player.contextName == 'Flow') player.contextName = null;
-                        Navigator.pop(ctx);
-                        _playFlow();
-                      },
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -160,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: EdgeInsets.only(top: top + 8, bottom: bottomInset(context)),
         children: [
           _TopBar(onProfile: () => Navigator.of(context).push(FadeRoute(const ProfileScreen()))),
-          _FlowHero(mood: _mood, loading: _flowLoading, onPlay: _playFlow, onTune: _tuneFlow),
+          const _NowHero(),
           _JumpBackIn(onFlow: _flowFromRecents),
 
           const SectionHeader('Daily', accentWord: 'mixes'),
@@ -317,68 +274,88 @@ class MutinyMark extends StatelessWidget {
       );
 }
 
-class _FlowHero extends StatelessWidget {
-  const _FlowHero({required this.mood, required this.loading, required this.onPlay, required this.onTune});
-
-  final FlowMood mood;
-  final bool loading;
-  final VoidCallback onPlay;
-  final VoidCallback onTune;
+/// The big card on Home: Mutiny's liquid animation with the song that is
+/// playing right now. Tap it to open the player.
+class _NowHero extends StatelessWidget {
+  const _NowHero();
 
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerController>();
-    final flowOn = player.contextName == 'Flow' && player.hasTrack;
-    final playing = flowOn && player.playing;
+    final track = player.current;
+    final playing = player.playing;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-      child: Glass(
-        radius: 32,
-        blur: 22,
-        child: SizedBox(
-          height: 360,
-          child: Stack(
-            children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 4,
-                height: 220,
-                child: LiquidOrb(active: player.playing),
-              ),
-              Positioned(
-                left: 20,
-                right: 20,
-                bottom: 22,
-                child: Column(
-                  children: [
-                    const Text('Flow', style: TextStyle(fontFamily: MText.display, fontSize: 40, fontWeight: FontWeight.w300, letterSpacing: -1.5, color: MColors.lilac, height: 1)),
-                    const SizedBox(height: 6),
-                    Text(
-                      flowOn ? player.current?.title ?? '' : 'Endless free music · ${mood.label}',
-                      style: MText.body,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        PillButton(
-                          label: loading ? 'Tuning…' : (playing ? 'Pause' : (flowOn ? 'Resume' : 'Start Flow')),
-                          icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                          filled: true,
-                          onTap: loading ? null : onPlay,
-                        ),
-                        const SizedBox(width: 10),
-                        PillButton(label: mood.label, icon: Icons.tune_rounded, onTap: onTune),
-                      ],
-                    ),
-                  ],
+      child: Pressable(
+        scale: 0.98,
+        onTap: track == null ? null : () => openNowPlaying(context),
+        child: Glass(
+          radius: 32,
+          blur: 22,
+          child: SizedBox(
+            height: 340,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 4,
+                  height: 220,
+                  child: FutureBuilder<Color?>(
+                    future: accentFromImage(track?.artworkUrl),
+                    builder: (_, snap) => LiquidOrb(active: playing, color: snap.data ?? MColors.purple),
+                  ),
                 ),
-              ),
-            ],
+                Positioned(
+                  left: 24,
+                  right: 24,
+                  bottom: 26,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 350),
+                    child: track == null
+                        ? const Column(
+                            key: ValueKey('idle'),
+                            children: [
+                              Text('Nothing playing', style: TextStyle(fontFamily: MText.display, fontSize: 26, fontWeight: FontWeight.w300, color: MColors.lilac, height: 1.1)),
+                              SizedBox(height: 8),
+                              Text('Pick a song or playlist to start', style: MText.body),
+                            ],
+                          )
+                        : Column(
+                            key: ValueKey(track.key),
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (playing) const Padding(padding: EdgeInsets.only(right: 8), child: EqualizerBars(size: 12)),
+                                  Text(
+                                    playing ? 'NOW PLAYING' : 'PAUSED',
+                                    style: MText.label.copyWith(color: playing ? MColors.purple : MColors.textSecondary),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                track.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontFamily: MText.display, fontSize: 28, fontWeight: FontWeight.w400, letterSpacing: -0.8, color: MColors.lilac, height: 1.1),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                [track.artist, if (player.contextName != null) player.contextName!].join(' · '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: MText.body,
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
