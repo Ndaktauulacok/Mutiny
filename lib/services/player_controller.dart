@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
@@ -81,19 +82,17 @@ class PlayerController extends ChangeNotifier {
       .toList();
 
   /// Position of the current track inside [queue].
-  int get queueIndex {
-    final st = player.sequenceState;
-    final i = st.currentIndex;
-    if (i == null) return 0;
-    if (!st.shuffleModeEnabled) return i;
-    final pos = st.shuffleIndices.indexOf(i);
-    return pos < 0 ? 0 : pos;
-  }
+  ///
+  /// Shuffle is done by Mutiny itself (the queue really is put in random
+  /// order) instead of the audio engine's shuffle mode: on Windows the
+  /// engine shuffled its own copy of the list, so skipping went out of step
+  /// and songs played in order. Queue position = engine index, always.
+  int get queueIndex => player.sequenceState.currentIndex ?? 0;
 
-  int _sequenceIndexFor(int queuePos) {
-    final st = player.sequenceState;
-    return st.shuffleModeEnabled ? st.shuffleIndices[queuePos] : queuePos;
-  }
+  int _sequenceIndexFor(int queuePos) => queuePos;
+
+  /// The list in its own order (what Shuffle off goes back to).
+  List<Track> _original = [];
 
   static Track? trackOf(Object? tag) {
     if (tag is MediaItem) {
@@ -137,23 +136,20 @@ class PlayerController extends ChangeNotifier {
     contextName = from;
     _consecutiveErrors = 0;
     final shuffleThis = (shuffled ?? _shuffleOn) && tracks.length > 1;
-    final start = index ?? (shuffleThis ? DateTime.now().microsecond % tracks.length : 0);
-        try {
-      await player.setShuffleModeEnabled(false);
+    _original = List.of(tracks);
+    final order = shuffleOrder(tracks, first: index, shuffle: shuffleThis);
+    final start = shuffleThis ? 0 : (index ?? 0).clamp(0, tracks.length - 1);
+    try {
+      if (player.shuffleModeEnabled) await player.setShuffleModeEnabled(false);
       // A single radio station should never repeat-loop a whole queue.
       if (tracks.length == 1 && tracks.first.isLive && player.loopMode == LoopMode.one) {
         await player.setLoopMode(LoopMode.off);
       }
       final load = player.setAudioSources(
-        tracks.map(sourceFor).toList(),
-        initialIndex: start.clamp(0, tracks.length - 1),
+        order.map(sourceFor).toList(),
+        initialIndex: start,
         preload: false,
       );
-      if (shuffleThis) {
-        await load;
-        await player.shuffle(); // keeps the first song first
-        await player.setShuffleModeEnabled(true);
-      }
       unawaited(player.play());
       await load;
     } on PlayerInterruptedException {
@@ -193,11 +189,12 @@ class PlayerController extends ChangeNotifier {
       onMessage?.call("Couldn't find similar songs");
       return;
     }
-    await playTracks([seed, ...mix.take(60)], from: '${seed.title} radio');
+    await playTracks([seed, ...mix.take(60)], index: 0, shuffled: false, from: '${seed.title} radio');
   }
 
   Future<void> addToQueue(Track t) async {
     if (!hasTrack) return playTrack(t);
+    _original.add(t);
     await player.addAudioSource(sourceFor(t));
     onMessage?.call('Added to queue');
     notifyListeners();
@@ -206,6 +203,8 @@ class PlayerController extends ChangeNotifier {
   Future<void> playNext(Track t) async {
     if (!hasTrack) return playTrack(t);
     final i = player.currentIndex ?? -1;
+    final cur = _current == null ? -1 : _original.indexOf(_current!);
+    _original.insert(cur + 1, t);
     await player.insertAudioSource(i + 1, sourceFor(t));
     onMessage?.call('Plays next');
     notifyListeners();
@@ -217,8 +216,8 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Reordering only makes sense in normal order.
-  bool get canReorder => !shuffle;
+  /// The queue can always be reordered (shuffle is a real order now).
+  bool get canReorder => true;
 
   /// [to] is the final index (already adjusted for the removed item).
   Future<void> moveInQueue(int from, int to) async {
@@ -266,14 +265,71 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> toggleShuffle() => setShuffle(!_shuffleOn);
 
-  /// Turns the shuffle switch on/off; the current queue follows it.
+  /// [tracks] in play order: unchanged, or [first] (or a random song) first
+  /// and every other song after it in random order.
+  static List<Track> shuffleOrder(List<Track> tracks, {int? first, required bool shuffle, math.Random? random}) {
+    if (!shuffle || tracks.length < 2) return List.of(tracks);
+    final rnd = random ?? math.Random();
+    final f = (first ?? rnd.nextInt(tracks.length)).clamp(0, tracks.length - 1);
+    final rest = [...tracks]..removeAt(f);
+    rest.shuffle(rnd);
+    return [tracks[f], ...rest];
+  }
+
+  /// The queue around the current song when the switch changes: shuffle on
+  /// → every other song in random order after it; off → the list's own
+  /// order again, continuing after the current song.
+  static ({List<Track> before, List<Track> after}) reorderAround(
+    List<Track> queue,
+    int current,
+    List<Track> original, {
+    required bool shuffle,
+    math.Random? random,
+  }) {
+    final cur = queue[current];
+    if (shuffle) {
+      final others = [...queue]..removeAt(current);
+      others.shuffle(random ?? math.Random());
+      return (before: const [], after: others);
+    }
+    // Original order, plus anything added later that it doesn't know.
+    final pool = [...queue]..removeAt(current);
+    final ordered = <Track>[];
+    for (final t in original) {
+      if (pool.remove(t)) ordered.add(t);
+    }
+    ordered.addAll(pool);
+    // The current song's place in the original list decides what comes next.
+    final at = original.indexOf(cur);
+    var split = 0;
+    if (at >= 0) {
+      final before = original.sublist(0, at).toSet();
+      split = ordered.takeWhile(before.contains).length;
+    }
+    return (before: ordered.sublist(0, split), after: ordered.sublist(split));
+  }
+
+  /// Turns the shuffle switch on/off; the current queue follows it at once,
+  /// without interrupting the song that is playing.
   Future<void> setShuffle(bool on) async {
     _shuffleOn = on;
     notifyListeners();
     unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_kShuffle, on)));
-    if (player.audioSources.isEmpty) return;
-    if (on) await player.shuffle();
-    await player.setShuffleModeEnabled(on);
+    final q = queue;
+    final i = player.currentIndex;
+    if (q.length < 2 || i == null || i >= q.length) return;
+    final r = reorderAround(q, i, _original, shuffle: on);
+    try {
+      if (player.shuffleModeEnabled) await player.setShuffleModeEnabled(false);
+      final len = player.audioSources.length;
+      // Keep the current song loaded; swap everything around it.
+      if (i + 1 < len) await player.removeAudioSourceRange(i + 1, len);
+      if (i > 0) await player.removeAudioSourceRange(0, i);
+      if (r.after.isNotEmpty) await player.addAudioSources(r.after.map(sourceFor).toList());
+      if (r.before.isNotEmpty) await player.insertAudioSources(0, r.before.map(sourceFor).toList());
+    } catch (e) {
+      debugPrint('Shuffle reorder failed: $e');
+    }
     notifyListeners();
   }
 
