@@ -276,6 +276,7 @@ class PillButton extends StatelessWidget {
     this.icon,
     this.filled = false,
     this.compact = false,
+    this.active = false,
   });
 
   final String label;
@@ -284,9 +285,12 @@ class PillButton extends StatelessWidget {
   final bool filled;
   final bool compact;
 
+  /// A switch that is on (e.g. Shuffle): lit up in purple with a dot.
+  final bool active;
+
   @override
   Widget build(BuildContext context) {
-    final fg = filled ? MColors.onAccent : MColors.text;
+    final fg = filled ? MColors.onAccent : (active ? MColors.lavender : MColors.text);
     final content = Padding(
       padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 20, vertical: compact ? 8 : 11),
       child: Row(
@@ -318,7 +322,32 @@ class PillButton extends StatelessWidget {
               ),
               child: content,
             )
-          : Glass(radius: 100, blur: 18, child: content),
+          : AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(color: active ? MColors.purple : const Color(0x00A259FF), width: 1.4),
+                boxShadow: active ? [BoxShadow(color: MColors.purple.withValues(alpha: 0.45), blurRadius: 18)] : const [],
+              ),
+              child: Glass(
+                radius: 100,
+                blur: 18,
+                tint: active ? MColors.purple : null,
+                strength: active ? 2 : 1,
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    content,
+                    if (active)
+                      Positioned(
+                        bottom: compact ? 2 : 3,
+                        child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: MColors.lavender, shape: BoxShape.circle)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }
@@ -443,7 +472,8 @@ class Artwork extends StatelessWidget {
   }
 }
 
-/// Fade-through route used for pages inside each tab.
+/// Fade-through route used for pages inside each tab. Pages can be swiped
+/// away from the left edge to go back, like on iPhone.
 class FadeRoute<T> extends PageRouteBuilder<T> {
   FadeRoute(Widget page)
       : super(
@@ -453,21 +483,113 @@ class FadeRoute<T> extends PageRouteBuilder<T> {
           transitionDuration: const Duration(milliseconds: 320),
           reverseTransitionDuration: const Duration(milliseconds: 240),
           pageBuilder: (_, _, _) => page,
-          transitionsBuilder: (_, anim, secondary, child) {
-            final inCurve = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-            final outCurve = CurvedAnimation(parent: secondary, curve: Curves.easeOutCubic);
-            return FadeTransition(
-              opacity: Tween(begin: 1.0, end: 0.0).animate(outCurve),
-              child: FadeTransition(
-                opacity: inCurve,
-                child: SlideTransition(
-                  position: Tween(begin: const Offset(0.06, 0), end: Offset.zero).animate(inCurve),
-                  child: child,
-                ),
-              ),
-            );
-          },
         );
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    // While the finger drags the page, it follows the finger exactly.
+    final gesture = navigator?.userGestureInProgress ?? false;
+    final inCurve = gesture ? animation : CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+    final outCurve = CurvedAnimation(parent: secondaryAnimation, curve: Curves.easeOutCubic);
+    final page = FadeTransition(
+      opacity: Tween(begin: 1.0, end: 0.0).animate(outCurve),
+      child: gesture
+          ? SlideTransition(position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(animation), child: child)
+          : FadeTransition(
+              opacity: inCurve,
+              child: SlideTransition(
+                position: Tween(begin: const Offset(0.06, 0), end: Offset.zero).animate(inCurve),
+                child: child,
+              ),
+            ),
+    );
+    if (isFirst) return page;
+    return _SwipeBack(route: this, child: page);
+  }
+
+  AnimationController get _controller => controller!;
+}
+
+/// Drag from the left edge to the right to go back (interactive).
+class _SwipeBack extends StatefulWidget {
+  const _SwipeBack({required this.route, required this.child});
+
+  final FadeRoute<dynamic> route;
+  final Widget child;
+
+  @override
+  State<_SwipeBack> createState() => _SwipeBackState();
+}
+
+class _SwipeBackState extends State<_SwipeBack> {
+  bool _dragging = false;
+
+  void _start(DragStartDetails d) {
+    if (!widget.route.isCurrent || widget.route.navigator == null) return;
+    _dragging = true;
+    widget.route.navigator!.didStartUserGesture();
+  }
+
+  void _update(DragUpdateDetails d) {
+    if (!_dragging) return;
+    final width = context.size?.width ?? 1;
+    final c = widget.route._controller;
+    c.value = (c.value - (d.primaryDelta ?? 0) / width).clamp(0.0, 1.0);
+  }
+
+  void _end(DragEndDetails d) {
+    if (!_dragging) return;
+    _dragging = false;
+    final c = widget.route._controller;
+    final nav = widget.route.navigator!;
+    final v = d.primaryVelocity ?? 0;
+    final back = v > 500 || (v > -300 && c.value < 0.6);
+    if (back) {
+      nav.pop();
+      if (c.isAnimating) {
+        // pop() animates from where the finger let go.
+      } else {
+        c.animateBack(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      }
+    } else {
+      c.animateTo(1, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
+    }
+    if (c.isAnimating) {
+      late final AnimationStatusListener l;
+      l = (status) {
+        nav.didStopUserGesture();
+        c.removeStatusListener(l);
+      };
+      c.addStatusListener(l);
+    } else {
+      nav.didStopUserGesture();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final edge = MediaQuery.paddingOf(context).left + 28;
+    return Stack(
+      children: [
+        widget.child,
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: edge,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragStart: _start,
+            onHorizontalDragUpdate: _update,
+            onHorizontalDragEnd: _end,
+            onHorizontalDragCancel: () {
+              if (_dragging) _end(DragEndDetails(primaryVelocity: 0));
+            },
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Glass bottom sheet with a grab handle.

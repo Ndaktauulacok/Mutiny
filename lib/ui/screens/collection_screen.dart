@@ -316,15 +316,23 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // Play follows the Shuffle switch: in order when it is
+                      // off, random order when it is on (like Spotify).
                       PillButton(label: 'Play', icon: Icons.play_arrow_rounded, filled: true, onTap: () {
                         _markPlayed(lib);
                         player.playTracks(tracks, from: title);
                       }),
                       const SizedBox(width: 12),
-                      PillButton(label: 'Shuffle', icon: Icons.shuffle_rounded, onTap: () {
-                        _markPlayed(lib);
-                        player.playTracks(tracks, shuffled: true, from: title);
-                      }),
+                      PillButton(
+                        label: 'Shuffle',
+                        icon: Icons.shuffle_rounded,
+                        active: context.select<PlayerController, bool>((p) => p.shuffle),
+                        onTap: () {
+                          final on = !player.shuffle;
+                          player.setShuffle(on);
+                          toast(context, on ? 'Shuffle on: Play mixes the order' : 'Shuffle off: songs play in order');
+                        },
+                      ),
                     ],
                   ),
                 ],

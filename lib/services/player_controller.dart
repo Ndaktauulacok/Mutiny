@@ -5,6 +5,7 @@ import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import 'audius_api.dart';
@@ -16,6 +17,10 @@ enum RepeatState { off, all, one }
 /// lock-screen controls (via just_audio_background on iOS/Android).
 class PlayerController extends ChangeNotifier {
   PlayerController(this.library) {
+    SharedPreferences.getInstance().then((p) {
+      _shuffleOn = p.getBool(_kShuffle) ?? false;
+      notifyListeners();
+    });
     _subs.add(player.sequenceStateStream.listen(_onSequence));
     _subs.add(player.playerStateStream.listen((_) => notifyListeners()));
     _subs.add(player.errorStream.listen(_onError));
@@ -51,7 +56,12 @@ class PlayerController extends ChangeNotifier {
   bool get buffering =>
       player.processingState == ProcessingState.loading ||
       player.processingState == ProcessingState.buffering;
-  bool get shuffle => player.shuffleModeEnabled;
+  static const _kShuffle = 'mutiny.shuffle';
+  bool _shuffleOn = false;
+
+  /// Shuffle switch, like Spotify's: when on, Play starts the list in a
+  /// random order; when off, songs play in order. Remembered across launches.
+  bool get shuffle => _shuffleOn;
   RepeatState get repeat => switch (player.loopMode) {
         LoopMode.off => RepeatState.off,
         LoopMode.all => RepeatState.all,
@@ -113,17 +123,22 @@ class PlayerController extends ChangeNotifier {
   }
 
   /// Replace the queue and start playing.
+  ///
+  /// [index]: the song the user tapped (plays first, also when shuffling).
+  /// Without it, the list starts at the top, or anywhere when shuffle is on.
+  /// [shuffled] overrides the shuffle switch for this list only.
   Future<void> playTracks(
     List<Track> tracks, {
-    int index = 0,
-    bool shuffled = false,
+    int? index,
+    bool? shuffled,
     String? from,
   }) async {
     if (tracks.isEmpty) return;
     contextName = from;
     _consecutiveErrors = 0;
-    final start = shuffled ? (DateTime.now().microsecond % tracks.length) : index;
-    try {
+    final shuffleThis = (shuffled ?? _shuffleOn) && tracks.length > 1;
+    final start = index ?? (shuffleThis ? DateTime.now().microsecond % tracks.length : 0);
+        try {
       await player.setShuffleModeEnabled(false);
       // A single radio station should never repeat-loop a whole queue.
       if (tracks.length == 1 && tracks.first.isLive && player.loopMode == LoopMode.one) {
@@ -134,10 +149,10 @@ class PlayerController extends ChangeNotifier {
         initialIndex: start.clamp(0, tracks.length - 1),
         preload: false,
       );
-      if (shuffled) {
+      if (shuffleThis) {
         await load;
+        await player.shuffle(); // keeps the first song first
         await player.setShuffleModeEnabled(true);
-        await player.shuffle();
       }
       unawaited(player.play());
       await load;
@@ -249,10 +264,16 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> seek(Duration d) => player.seek(d);
 
-  Future<void> toggleShuffle() async {
-    final enable = !player.shuffleModeEnabled;
-    if (enable) await player.shuffle();
-    await player.setShuffleModeEnabled(enable);
+  Future<void> toggleShuffle() => setShuffle(!_shuffleOn);
+
+  /// Turns the shuffle switch on/off; the current queue follows it.
+  Future<void> setShuffle(bool on) async {
+    _shuffleOn = on;
+    notifyListeners();
+    unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_kShuffle, on)));
+    if (player.audioSources.isEmpty) return;
+    if (on) await player.shuffle();
+    await player.setShuffleModeEnabled(on);
     notifyListeners();
   }
 

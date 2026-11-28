@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -38,6 +39,7 @@ class _ShellState extends State<Shell> {
       if (mounted) toast(context, m);
     };
     player.addListener(_updateAccent);
+    HardwareKeyboard.instance.addHandler(_onKey);
     // Catch up on changes made on other devices while the app was closed.
     _lifecycle = AppLifecycleListener(onResume: () {
       context.read<CloudSync>().onResume();
@@ -49,8 +51,35 @@ class _ShellState extends State<Shell> {
     });
   }
 
+  /// Keyboard shortcuts on computers: Space plays/pauses (not while typing),
+  /// media keys work too.
+  bool _onKey(KeyEvent e) {
+    if (e is! KeyDownEvent) return false;
+    final player = context.read<PlayerController>();
+    final key = e.logicalKey;
+    if (key == LogicalKeyboardKey.mediaPlayPause || key == LogicalKeyboardKey.mediaPlay || key == LogicalKeyboardKey.mediaPause) {
+      if (player.hasTrack) player.togglePlay();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.mediaTrackNext) {
+      player.next();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.mediaTrackPrevious) {
+      player.previous();
+      return true;
+    }
+    if (key != LogicalKeyboardKey.space || !player.hasTrack) return false;
+    final focus = FocusManager.instance.primaryFocus?.context;
+    final typing = focus != null && (focus.widget is EditableText || focus.findAncestorWidgetOfExactType<EditableText>() != null);
+    if (typing) return false;
+    player.togglePlay();
+    return true;
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
     _lifecycle.dispose();
     context.read<PlayerController>().removeListener(_updateAccent);
     super.dispose();
@@ -82,7 +111,12 @@ class _ShellState extends State<Shell> {
         if (didPop) return;
         final nav = _navKeys[_tab].currentState;
         if (nav != null && await nav.maybePop()) return;
-        if (_tab != 0) setState(() => _tab = 0);
+        if (_tab != 0) {
+          setState(() => _tab = 0);
+        } else {
+          // Back on Home with nothing open: leave the app (music keeps playing).
+          await SystemNavigator.pop();
+        }
       },
       child: Scaffold(
         backgroundColor: Colors.black,
