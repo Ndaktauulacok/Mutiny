@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
+import 'song_importer.dart';
 
 /// Everything the user keeps: liked songs, playlists, saved stations,
 /// imported files, listening history and recent searches.
@@ -584,51 +586,81 @@ class LibraryStore extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------- local files
-  /// Lets the user pick audio files and copies them into the app's own
-  /// folder, so they keep playing even if the originals move.
-  /// Returns how many files were added.
-  Future<int> importLocalFiles() async {
-    if (kIsWeb) return 0;
+  /// Lets the user pick many music files at once and adds them as their own
+  /// songs: clean names, a cover, and the length for synced lyrics. They
+  /// are private and sync to the user's other devices when signed in.
+  Future<ImportReport?> importSongs({void Function(int done, int total)? onProgress}) async {
+    if (kIsWeb) return null;
     final picked = await FilePicker.pickFiles(type: FileType.audio);
-    if (picked.isEmpty) return 0;
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory('${docs.path}${Platform.pathSeparator}mutiny_music');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
+    if (picked.isEmpty) return null;
+    return importSongFiles([
+      for (final f in picked)
+        if (f.path != null) f.path!,
+    ], onProgress: onProgress);
+  }
 
-    var added = 0;
-    for (final f in picked) {
-      final safeName = f.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final dest = File('${dir.path}${Platform.pathSeparator}$safeName');
+  /// Adds the music files at [paths] (see [importSongs]).
+  Future<ImportReport> importSongFiles(List<String> paths, {void Function(int done, int total)? onProgress, http.Client? client}) async {
+    final report = ImportReport();
+    final docs = await getApplicationDocumentsDirectory();
+    final music = Directory('${docs.path}${Platform.pathSeparator}mutiny_music');
+    final images = Directory('${docs.path}${Platform.pathSeparator}mutiny_images');
+    if (!music.existsSync()) music.createSync(recursive: true);
+
+    // Songs already here, by (cleaned title, file size): skips repeats such
+    // as "song.mp3" and "song (1).mp3".
+    String keyOf(String title, int size) => '${SongImporter.norm(title)}#$size';
+    final seen = <String>{
+      for (final t in localTracks)
+        if (File(t.uri).existsSync()) keyOf(t.title, File(t.uri).lengthSync()),
+    };
+
+    for (var i = 0; i < paths.length; i++) {
+      onProgress?.call(i, paths.length);
+      final src = File(paths[i]);
+      final fileName = src.uri.pathSegments.isEmpty ? paths[i] : Uri.decodeComponent(src.uri.pathSegments.last);
       try {
-        if (!dest.existsSync()) {
-          final src = f.path;
-          if (src != null && File(src).existsSync()) {
-            await File(src).copy(dest.path);
-          } else {
-            await dest.writeAsBytes(await f.xFile.readAsBytes());
-          }
+        if (!src.existsSync()) throw Exception('missing');
+        final size = src.lengthSync();
+        final named = SongImporter.cleanFileName(fileName);
+        final tags = await SongImporter.readTags(src.path);
+        final title = named.title.isNotEmpty ? named.title : (tags.title ?? 'Untitled');
+        if (!seen.add(keyOf(title, size))) {
+          report.duplicates++;
+          continue;
         }
+        var artist = named.artist.isNotEmpty ? named.artist : (tags.artist ?? '');
+        final match = await SongImporter.lookup(title: title, artist: artist, client: client);
+        if (artist.isEmpty && match != null) artist = match.artist;
+
+        // Cover: the catalogue's (clean, square); else the file's own picture.
+        String? cover = match?.coverUrl;
+        if (cover == null && tags.cover != null && tags.cover!.isNotEmpty) {
+          if (!images.existsSync()) images.createSync(recursive: true);
+          final ext = (tags.coverType ?? '').contains('png') ? 'png' : 'jpg';
+          final f = File('${images.path}${Platform.pathSeparator}song_${DateTime.now().microsecondsSinceEpoch}.$ext');
+          await f.writeAsBytes(tags.cover!);
+          cover = f.path;
+        }
+        if (cover != null) report.withCover++;
+
+        final safeName = fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+        final dest = File('${music.path}${Platform.pathSeparator}${DateTime.now().millisecondsSinceEpoch}_$safeName');
+        await src.copy(dest.path);
+        addOwnSong(
+          audioPath: dest.path,
+          title: title,
+          artist: artist.isEmpty ? 'Unknown artist' : artist,
+          coverPath: cover,
+          durationSec: tags.durationSec ?? match?.durationSec,
+        );
+        report.added++;
       } catch (_) {
-        continue;
-      }
-      final (artist, title) = parseFileName(f.name);
-      final track = Track(
-        id: safeName,
-        title: title,
-        artist: artist,
-        source: TrackSource.local,
-        uri: dest.path,
-        genre: 'On this device',
-      );
-      if (!localTracks.contains(track)) {
-        localTracks.add(track);
-        added++;
+        report.failed.add(fileName);
       }
     }
-    localTracks.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-    _writeTracks(_kLocal, localTracks);
-    notifyListeners();
-    return added;
+    onProgress?.call(paths.length, paths.length);
+    return report;
   }
 
   // ------------------------------------------------------------ own songs
@@ -656,7 +688,8 @@ class LibraryStore extends ChangeNotifier {
   /// Lets the user pick a cover picture for one of their songs.
   Future<String?> pickSongCover({ImageSource source = ImageSource.gallery}) => _pickImage('song', source);
 
-  /// Saves a song the user added themselves. It stays on this device only.
+  /// Saves a song the user added themselves. Private to them; it syncs to
+  /// their other devices when signed in.
   Track addOwnSong({
     required String audioPath,
     required String title,

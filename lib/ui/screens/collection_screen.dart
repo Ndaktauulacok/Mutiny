@@ -414,11 +414,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 
-  Future<void> _import(BuildContext context) async {
-    final lib = context.read<LibraryStore>();
-    final n = await lib.importLocalFiles();
-    if (context.mounted && n > 0) toast(context, 'Added $n ${n == 1 ? 'song' : 'songs'}');
-  }
+  Future<void> _import(BuildContext context) => importSongsWithProgress(context);
 
   void _playlistMenu(BuildContext context, UserPlaylist p) {
     final lib = context.read<LibraryStore>();

@@ -458,3 +458,56 @@ class _Input extends StatelessWidget {
         ),
       );
 }
+
+/// Picks many music files and adds them as the user's own songs, showing
+/// progress (finding covers takes a moment per song).
+Future<void> importSongsWithProgress(BuildContext context) async {
+  final lib = context.read<LibraryStore>();
+  final progress = ValueNotifier<(int, int)>((0, 0));
+  var sheetOpen = false;
+  final report = await lib.importSongs(onProgress: (done, total) {
+    progress.value = (done, total);
+    if (!sheetOpen && context.mounted && total > 0) {
+      sheetOpen = true;
+      showGlassSheet(
+        context,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 22, 24, 28),
+            child: ValueListenableBuilder<(int, int)>(
+              valueListenable: progress,
+              builder: (_, p, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Adding your songs', style: MText.h2),
+                  const SizedBox(height: 8),
+                  Text('Finding covers and details · ${p.$1} of ${p.$2}', style: MText.body),
+                  const SizedBox(height: 18),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: p.$2 == 0 ? null : p.$1 / p.$2,
+                      minHeight: 6,
+                      color: MColors.purple,
+                      backgroundColor: const Color(0x22FFFFFF),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  });
+  if (sheetOpen && context.mounted) Navigator.of(context, rootNavigator: true).pop();
+  progress.dispose();
+  if (report == null || !context.mounted) return;
+  final parts = [
+    'Added ${report.added} ${report.added == 1 ? 'song' : 'songs'}',
+    if (report.duplicates > 0) '${report.duplicates} already there',
+    if (report.failed.isNotEmpty) "${report.failed.length} couldn't be read",
+  ];
+  toast(context, parts.join(' · '));
+}

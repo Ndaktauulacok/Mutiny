@@ -40,7 +40,7 @@ class LyricsApi {
         final res = await _client.get(
           Uri.https('lrclib.net', '/api/get', {
             'track_name': title,
-            'artist_name': artist,
+            'artist_name': artist.split(RegExp(r',|&')).first.trim(), // main artist
             if (t.durationSec != null) 'duration': '${t.durationSec}',
           }),
           headers: {'User-Agent': 'Mutiny (https://github.com/Ndaktauulacok/Mutiny)'},

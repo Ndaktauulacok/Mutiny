@@ -84,6 +84,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
               _open(const AddSongScreen());
             },
           ),
+          SheetAction(
+            icon: Icons.drive_folder_upload_rounded,
+            label: 'Import many songs',
+            onTap: () {
+              Navigator.pop(ctx);
+              importSongsWithProgress(context);
+            },
+          ),
           const SizedBox(height: 8),
         ],
       ),
@@ -284,10 +292,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     label: Text('Add song', style: MText.title.copyWith(fontSize: 13, color: MColors.lavender)),
                   ),
                   TextButton.icon(
-                    onPressed: () async {
-                      final n = await lib.importLocalFiles();
-                      if (context.mounted && n > 0) toast(context, 'Added $n ${n == 1 ? 'song' : 'songs'}');
-                    },
+                    onPressed: () => importSongsWithProgress(context),
                     icon: const Icon(Icons.drive_folder_upload_rounded, size: 18, color: MColors.textSecondary),
                     label: Text('Import many', style: MText.title.copyWith(fontSize: 13, color: MColors.textSecondary)),
                   ),
