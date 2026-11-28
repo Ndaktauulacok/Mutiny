@@ -23,6 +23,21 @@ void main() {
     });
   });
 
+  test('update check picks the highest version, not the "latest" label', () {
+    Map<String, dynamic> rel(int n, {bool draft = false}) => {
+          'tag_name': 'v1.0.$n',
+          'draft': draft,
+          'assets': [
+            {'name': 'Mutiny-Windows.zip', 'browser_download_url': 'https://d/$n.zip'},
+          ],
+        };
+    // 1.0.16 finished after 1.0.17 and was listed first.
+    final best = Updater.newest([rel(16), rel(17), rel(15), rel(18, draft: true)])!;
+    expect(best.build, 17);
+    expect(best.windowsUrl, 'https://d/17.zip');
+    expect(Updater.newest([]), isNull);
+  });
+
   group('Windows update', () {
     late Directory dir;
     setUp(() => dir = Directory.systemTemp.createTempSync('mutiny_upd'));

@@ -12,13 +12,14 @@ import '../theme.dart';
 DateTime? _lastAutoCheck;
 int? _shownBuild;
 
-/// Quietly checks GitHub for a newer Mutiny at start-up and whenever the app
-/// comes back to the screen (at most every 3 hours). iPhones rarely restart
+/// Quietly checks GitHub for a newer Mutiny at start-up, whenever the app
+/// comes back to the screen and every half hour while it stays open (at
+/// most every 20 minutes). iPhones rarely restart
 /// an app, so checking only at launch meant they never saw updates.
 Future<void> autoCheckForUpdate(BuildContext context) async {
   if (kIsWeb) return;
   final now = DateTime.now();
-  if (_lastAutoCheck != null && now.difference(_lastAutoCheck!) < const Duration(hours: 3)) return;
+  if (_lastAutoCheck != null && now.difference(_lastAutoCheck!) < const Duration(minutes: 20)) return;
   _lastAutoCheck = now;
   try {
     final info = await Updater.check();

@@ -61,18 +61,32 @@ class Updater {
   /// Returns the latest release if it is newer than this app, else null.
   static Future<UpdateInfo?> check({http.Client? client}) async {
     final c = client ?? http.Client();
+    // The newest version by number, not GitHub's "latest" label: when two
+    // builds finished out of order, "latest" pointed at an older one.
     final res = await c
         .get(
-          Uri.parse('https://api.github.com/repos/$repo/releases/latest'),
+          Uri.parse('https://api.github.com/repos/$repo/releases?per_page=15'),
           headers: {'Accept': 'application/vnd.github+json', 'User-Agent': 'Mutiny'},
         )
         .timeout(const Duration(seconds: 12));
     if (res.statusCode != 200) return null;
-    final latest = parseRelease(jsonDecode(res.body) as Map<String, dynamic>);
+    final latest = newest(jsonDecode(res.body) as List);
     if (latest == null) return null;
     final (_, build) = await current();
     return latest.build > build ? latest : null;
   }
+
+  /// The release with the highest build number (drafts and pre-releases skipped).
+  static UpdateInfo? newest(List releases) {
+    UpdateInfo? best;
+    for (final r in releases) {
+      if (r is! Map || r['draft'] == true || r['prerelease'] == true) continue;
+      final info = parseRelease(Map<String, dynamic>.from(r));
+      if (info != null && (best == null || info.build > best.build)) best = info;
+    }
+    return best;
+  }
+
 
   static UpdateInfo? parseRelease(Map<String, dynamic> j) {
     final tag = j['tag_name'] as String? ?? '';

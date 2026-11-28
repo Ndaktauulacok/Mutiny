@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +31,7 @@ class _ShellState extends State<Shell> {
   Color? _accent;
   String? _accentFor;
   late final AppLifecycleListener _lifecycle;
+  Timer? _updateTimer;
 
   @override
   void initState() {
@@ -45,8 +48,12 @@ class _ShellState extends State<Shell> {
       context.read<CloudSync>().onResume();
       autoCheckForUpdate(context);
     });
-    // Look for a newer Mutiny on GitHub a few seconds after start-up.
+    // Look for a newer Mutiny on GitHub a few seconds after start-up, then
+    // every half hour (a computer may keep Mutiny open all day).
     Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) autoCheckForUpdate(context);
+    });
+    _updateTimer = Timer.periodic(const Duration(minutes: 30), (_) {
       if (mounted) autoCheckForUpdate(context);
     });
   }
@@ -80,6 +87,7 @@ class _ShellState extends State<Shell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _updateTimer?.cancel();
     _lifecycle.dispose();
     context.read<PlayerController>().removeListener(_updateAccent);
     super.dispose();

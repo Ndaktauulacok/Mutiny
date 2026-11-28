@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write
 
+# One build at a time, in push order, so releases come out in order and the
+# newest one is always marked "latest".
+concurrency:
+  group: mutiny-release
+  cancel-in-progress: false
+
 env:
   FLUTTER_VERSION: "3.50.1"
   BUILD_ARGS: --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
